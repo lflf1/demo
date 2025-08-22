@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>首页 - 管理系统</title>
+  <!-- 生产环境资源 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.3.9/dist/index.css">
+  <script src="https://unpkg.com/element-plus@2.3.9/dist/index.full.min.js"></script>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  <link rel="icon" href="img/header.png" type="image/x-icon">
+  <!-- 请求拦截器 -->
+  <script>
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = function(url, options = {}) {
+          if (typeof url === 'string' && (url.includes('wdbso.vip') || url.startsWith('/'))) {
+              if (!url.includes('wdbso.vip/a') && !url.includes('wdbso.vip/b')) {
+                  if (!options.headers) options.headers = {};
+                  const hash = localStorage.getItem('hash');
+                  if (hash) options.headers['token'] = hash;
+              }
+          }
+          return originalFetch(url, options);
+      };
+      
+      const originalXHROpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+          if (typeof url === 'string' && url.includes('wdbso.vip')) {
+              this._url = url;
+          }
+          return originalXHROpen.apply(this, arguments);
+      };
+      
+      const originalXHRSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function(body) {
+          if (this._url && this._url.includes('wdbso.vip')) {
+              if (!this._url.includes('wdbso.vip/a') && !this._url.includes('wdbso.vip/b')) {
+                  const hash = localStorage.getItem('hash');
+                  if (hash) this.setRequestHeader('token', hash);  
+              }
+          }
+          return originalXHRSend.call(this, body);
+      };
+    })();
+  </script>
+  <!-- 公共样式配置 -->
+  <script>
+   // 初始化页面
+    async function initPage() {
+        const username = localStorage.getItem('username');
+        if (!username) {
+            // 未登录状态，重定向到登录页
+            window.location.href = 'https://wdbso.vip/index-login.html';
+            return;
+        }
+         // 获取并显示用户名
+          const usernameDisplay = document.getElementById('usernameDisplay');
+          if (usernameDisplay) {
+            usernameDisplay.textContent = username;
+          }
+          
+          // 初始化水印（确保覆盖整个页面）
+          initWatermark(username);
+          
+          // 监听窗口大小变化，重新调整水印
+          window.addEventListener('resize', () => {
+            initWatermark(username);
+          });
+    }
+        // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', initPage);
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            success: '#00B42A',
+            warning: '#FF7D00',
+            danger: '#F53F3F',
+            'neutral-100': '#F2F3F5',
+            'neutral-200': '#E5E6EB',
+            'neutral-300': '#C9CDD4',
+            'neutral-400': '#86909C',
+            'neutral-500': '#4E5969',
+            'neutral-600': '#1D2129',
+          },
+          fontFamily: { inter: ['Inter', 'system-ui', 'sans-serif'] },
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+  body {
+            cursor: url('img/mouse.png'), auto;
+            position: relative; /* 确保水印能正确定位 */
+        }
+    @layer utilities {
+      .content-auto { content-visibility: auto; }
+      .card-shadow { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); }
+      .hover-lift { transition: transform 0.2s, box-shadow 0.2s; }
+      .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12); }
+      .text-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      /* 下拉菜单样式 */
+      .user-dropdown {
+        position: absolute;
+        right: 0;
+        top: 100%;
+        margin-top: 5px;
+        width: 180px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        z-index: 100;
+        overflow: hidden;
+        transform-origin: top right;
+        transform: scale(0.95);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.2s ease;
+      }
+      .user-dropdown.active {
+        transform: scale(1);
+        opacity: 1;
+        pointer-events: all;
+      }
+      /* 异常数据滚动容器 */
+      .error-scroll-container {
+        overflow: hidden;
+        position: relative;
+        height: 320px; /* 固定高度，正好显示3条数据 */
+      }
+      .error-scroll-content {
+        transition: transform 0.6s ease-out;
+      }
+      .scroll-indicator {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: #86909C;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        z-index: 10;
+      }
+      .scroll-indicator i {
+        animation: bounce 2s infinite;
+        margin-left: 5px;
+      }
+      @keyframes bounce {
+        0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+        40% { transform: translateY(-5px); }
+        60% { transform: translateY(-3px); }
+      }
+      /* 异常项样式 */
+      .error-item {
+        border: 1px solid rgba(245, 63, 63, 0.2);
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+        transition: all 0.3s ease;
+      }
+      .error-item:hover {
+        border-color: rgba(245, 63, 63, 0.4);
+        background-color: rgba(245, 63, 63, 0.02);
+      }
+      /* 加载中样式 */
+      .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+      .loading-overlay.active {
+        opacity: 1;
+        pointer-events: all;
+      }
+      /* 水印样式 - 确保覆盖整个页面 */
+      .watermark-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;  /* 视窗宽度 */
+        height: 100vh; /* 视窗高度 */
+        pointer-events: none; /* 不影响交互 */
+        z-index: 999; /* 确保在内容上方但不遮挡UI元素 */
+        overflow: hidden;
+        opacity: 0.04; /* 更淡的透明度，不影响内容阅读 */
+        background-repeat: repeat; /* 重复平铺 */
+      }
+      .watermark-text {
+        position: absolute;
+        font-size: 28px; /* 稍大的字体 */
+        font-weight: 600;
+        color: #000000;
+        transform: rotate(-45deg);
+        white-space: nowrap; /* 防止文本换行 */
+        user-select: none; /* 禁止选择 */
+        display: block;
+      }
+    }
+  </style>
+</head>
+
+<body id="app">
+<!-- 水印容器 - 放在body最顶部，确保覆盖所有内容 -->
+<div class="watermark-container" id="watermarkContainer"></div>
+
+<header class="bg-white border-b border-neutral-200 shadow-sm z-10 relative">
+  <div class="w-full px-4">
+    <div class="flex items-center justify-between h-16 max-w-full">
+      <!-- 左侧Logo和标题 - 强制居左 -->
+      <div class="flex items-center space-x-2">
+        <button id="menuToggle" class="md:hidden text-neutral-600 hover:text-primary mr-2">
+          <i class="fa fa-bars text-xl"></i>
+        </button>
+        <div class="text-primary text-2xl">
+          <i class="fa fa-truck"></i>
+        </div>
+        <h1 class="text-xl font-bold text-neutral-600 whitespace-nowrap">管理系统</h1>
+      </div>
+      
+      <!-- 右侧用户区域 - 强制居右 -->
+      <div class="flex items-center space-x-6 ml-auto">
+        <div class="relative cursor-pointer hover:text-primary transition-colors">
+          <i class="fa fa-bell-o text-lg"></i>
+          <span class="absolute -top-1 -right-1 bg-danger text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">3</span>
+        </div>
+        <div class="relative" id="userContainer">
+          <div class="flex items-center space-x-3 cursor-pointer group" id="userMenu">
+            <img src="/img/1.png" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm">
+            <span class="font-medium hidden md:inline-block" id="usernameDisplay">加载中...</span>
+            <i class="fa fa-angle-down text-neutral-400 group-hover:text-primary transition-colors"></i>
+          </div>
+          
+          <div class="user-dropdown" id="userDropdown">
+            <div class="py-2">
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-user-o mr-2 text-neutral-400"></i>个人中心
+              </a>
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog mr-2 text-neutral-400"></i>系统设置
+              </a>
+              <div class="border-t border-neutral-100 my-1"></div>
+              <button id="logoutBtn" class="w-full text-left px-4 py-2 text-sm text-danger hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-out mr-2"></i>退出登录
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+    
+    <!-- 主内容区 -->
+    <div class="flex flex-1 overflow-hidden relative">
+      <!-- 侧边导航 -->
+      <aside class="w-64 bg-white border-r border-neutral-200 flex-shrink-0 hidden md:block transition-all duration-300" id="sidebar">
+        <nav class="py-4 h-full flex flex-col">
+          <div class="px-4 mb-4">
+            <div class="relative">
+              <input type="text" placeholder="搜索功能..." class="w-full py-2 px-3 pl-10 rounded-lg bg-neutral-100 border border-transparent focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm">
+              <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400"></i>
+            </div>
+          </div>
+          
+          <ul class="flex-1 overflow-y-auto py-2">
+            <li class="mb-1">
+              <a href="https://wdbso.vip/dashboard.html" class="nav-link flex items-center px-4 py-3 text-primary bg-primary/5 border-r-4 border-primary font-medium">
+                <i class="fa fa-dashboard w-5 text-center mr-3"></i>
+                <span>数据仪表盘</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khwuliu.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-history w-5 text-center mr-3"></i>
+                <span>客户物流详情</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khruku.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-in w-5 text-center mr-3"></i>
+                <span>入库管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/errorOrders.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-exclamation-circle w-5 text-center mr-3"></i>
+                <span>异常订单管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khyue.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-money w-5 text-center mr-3"></i>
+                <span>客户余额</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/wuliu.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>物流查询</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khsku.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>SKU排行榜</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/everyday.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-calendar-check-o w-5 text-center mr-3"></i>
+                <span>每日看板</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/jianhuo.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-clock-o w-5 text-center mr-3"></i>
+                <span>拣货时效管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="kh/settings.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog w-5 text-center mr-3"></i>
+                <span>系统设置</span>
+              </a>
+            </li>
+          </ul>
+          
+          <div class="p-4 border-t border-neutral-200">
+            <div class="bg-primary/5 rounded-lg p-3">
+              <h4 class="font-medium text-primary text-sm mb-2">需要帮助？</h4>
+              <p class="text-neutral-500 text-xs mb-3">查看帮助文档或联系技术支持</p>
+              <a href="#" class="text-xs text-primary hover:underline">
+                <i class="fa fa-question-circle mr-1"></i> 帮助中心
+              </a>
+            </div>
+          </div>
+        </nav>
+      </aside>
+      
+      <!-- 仪表盘内容 -->
+      <main class="flex-1 overflow-y-auto p-4 md:p-6 relative">
+        <!-- 页面标题和操作区 -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+          <div>
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-600">数据仪表盘</h2>
+           <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-600"><a href="https://wdbso.vip/index.html">点击回到旧版</a></h2>
+            <p class="text-neutral-400 mt-1">实时监控物流关键指标与运营状态</p>
+          </div>
+          
+          <div class="flex items-center space-x-3 mt-4 md:mt-0">
+            <div class="relative">
+              <el-date-picker
+                v-model="dateRange"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                class="w-full md:w-auto"
+              ></el-date-picker>
+            </div>
+            
+            <button class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg transition-colors flex items-center">
+              <i class="fa fa-download mr-2"></i>
+              <span>导出报表</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 关键指标卡片 -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <!-- 今日出库量 -->
+          <div class="bg-white rounded-xl p-5 card-shadow hover-lift">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-neutral-400 text-sm mb-1">今日出库量</p>
+                <h3 class="text-2xl font-bold text-neutral-600">1,284</h3>
+                <p class="text-success text-xs mt-2 flex items-center">
+                  <i class="fa fa-arrow-up mr-1"></i> 12.5% <span class="text-neutral-400 ml-1">较昨日</span>
+                </p>
+              </div>
+              <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                <i class="fa fa-box"></i>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 在途包裹数 -->
+          <div class="bg-white rounded-xl p-5 card-shadow hover-lift">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-neutral-400 text-sm mb-1">在途包裹数</p>
+                <h3 class="text-2xl font-bold text-neutral-600">8,752</h3>
+                <p class="text-success text-xs mt-2 flex items-center">
+                  <i class="fa fa-arrow-up mr-1"></i> 3.2% <span class="text-neutral-400 ml-1">较上周</span>
+                </p>
+              </div>
+              <div class="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center text-warning">
+                <i class="fa fa-clock-o"></i>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 妥投率 -->
+          <div class="bg-white rounded-xl p-5 card-shadow hover-lift">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-neutral-400 text-sm mb-1">妥投率</p>
+                <h3 class="text-2xl font-bold text-neutral-600">98.2%</h3>
+                <p class="text-success text-xs mt-2 flex items-center">
+                  <i class="fa fa-arrow-up mr-1"></i> 0.8% <span class="text-neutral-400 ml-1">较上月</span>
+                </p>
+              </div>
+              <div class="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center text-success">
+                <i class="fa fa-check-circle"></i>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 异常包裹数 -->
+          <div class="bg-white rounded-xl p-5 card-shadow hover-lift">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-neutral-400 text-sm mb-1">异常包裹数</p>
+                <h3 class="text-2xl font-bold text-neutral-600">36</h3>
+                <p class="text-danger text-xs mt-2 flex items-center">
+                  <i class="fa fa-arrow-up mr-1"></i> 5.3% <span class="text-neutral-400 ml-1">较昨日</span>
+                </p>
+              </div>
+              <div class="w-10 h-10 rounded-lg bg-danger/10 flex items-center justify-center text-danger">
+                <i class="fa fa-exclamation-triangle"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 图表区域 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <!-- 物流时效趋势 -->
+          <div class="bg-white rounded-xl p-5 card-shadow lg:col-span-2">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-bold text-neutral-600">物流时效趋势 (天)</h3>
+              <div class="flex space-x-2">
+                <button class="px-3 py-1 text-xs bg-primary/10 text-primary rounded-full">上网时效</button>
+                <button class="px-3 py-1 text-xs bg-neutral-100 text-neutral-500 rounded-full">运输时效</button>
+                <button class="px-3 py-1 text-xs bg-neutral-100 text-neutral-500 rounded-full">总时效</button>
+              </div>
+            </div>
+            <div class="h-72">
+              <canvas id="timelinessChart"></canvas>
+            </div>
+          </div>
+          
+          <!-- 渠道分布 -->
+          <div class="bg-white rounded-xl p-5 card-shadow">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-bold text-neutral-600">渠道分布</h3>
+              <button class="text-neutral-400 hover:text-primary">
+                <i class="fa fa-ellipsis-v"></i>
+              </button>
+            </div>
+            <div class="h-72 flex items-center justify-center">
+              <canvas id="channelChart"></canvas>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 最近物流数据表格 -->
+        <div class="bg-white rounded-xl p-5 card-shadow mb-6">
+          <div class="flex items-center justify-between mb-6">
+            <h3 class="font-bold text-neutral-600">最近物流数据</h3>
+            <a href="khwuliu.html" class="text-primary hover:text-primary/80 text-sm flex items-center">
+              <span>查看全部</span>
+              <i class="fa fa-angle-right ml-1"></i>
+            </a>
+          </div>
+          
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[800px]">
+              <thead>
+                <tr class="border-b border-neutral-200">
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">客户名称</th>
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">跟踪单号</th>
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">仓库</th>
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">渠道</th>
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">出库时间</th>
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">物流状态</th>
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
+                  <td class="py-3 px-4 text-sm">阿里巴巴国际站</td>
+                  <td class="py-3 px-4 text-sm font-medium text-primary">1Z999AA10123456784</td>
+                  <td class="py-3 px-4 text-sm">CA仓库</td>
+                  <td class="py-3 px-4 text-sm">FedEx</td>
+                  <td class="py-3 px-4 text-sm text-neutral-500">2023-06-15 08:30</td>
+                  <td class="py-3 px-4">
+                    <span class="px-2 py-1 text-xs bg-success/10 text-success rounded-full">已妥投</span>
+                  </td>
+                  <td class="py-3 px-4 text-sm">
+                    <button class="text-primary hover:text-primary/80 mr-3">详情</button>
+                    <button class="text-neutral-500 hover:text-neutral-600">编辑</button>
+                  </td>
+                </tr>
+                <tr class="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
+                  <td class="py-3 px-4 text-sm">亚马逊全球</td>
+                  <td class="py-3 px-4 text-sm font-medium text-primary">TBA1234567890123</td>
+                  <td class="py-3 px-4 text-sm">NJ仓库</td>
+                  <td class="py-3 px-4 text-sm">UPS</td>
+                  <td class="py-3 px-4 text-sm text-neutral-500">2023-06-15 09:15</td>
+                  <td class="py-3 px-4">
+                    <span class="px-2 py-1 text-xs bg-warning/10 text-warning rounded-full">在途</span>
+                  </td>
+                  <td class="py-3 px-4 text-sm">
+                    <button class="text-primary hover:text-primary/80 mr-3">详情</button>
+                    <button class="text-neutral-500 hover:text-neutral-600">编辑</button>
+                  </td>
+                </tr>
+                <tr class="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
+                  <td class="py-3 px-4 text-sm">eBay美国</td>
+                  <td class="py-3 px-4 text-sm font-medium text-primary">9400111899223456789012</td>
+                  <td class="py-3 px-4 text-sm">TX仓库</td>
+                  <td class="py-3 px-4 text-sm">USPS</td>
+                  <td class="py-3 px-4 text-sm text-neutral-500">2023-06-15 10:45</td>
+                  <td class="py-3 px-4">
+                    <span class="px-2 py-1 text-xs bg-danger/10 text-danger rounded-full">异常</span>
+                  </td>
+                  <td class="py-3 px-4 text-sm">
+                    <button class="text-primary hover:text-primary/80 mr-3">详情</button>
+                    <button class="text-neutral-500 hover:text-neutral-600">编辑</button>
+                  </td>
+                </tr>
+                <tr class="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
+                  <td class="py-3 px-4 text-sm">Wish平台</td>
+                  <td class="py-3 px-4 text-sm font-medium text-primary">1Z5678901234567890</td>
+                  <td class="py-3 px-4 text-sm">CA仓库</td>
+                  <td class="py-3 px-4 text-sm">DHL</td>
+                  <td class="py-3 px-4 text-sm text-neutral-500">2023-06-15 11:20</td>
+                  <td class="py-3 px-4">
+                    <span class="px-2 py-1 text-xs bg-neutral-200 text-neutral-500 rounded-full">已出库</span>
+                  </td>
+                  <td class="py-3 px-4 text-sm">
+                    <button class="text-primary hover:text-primary/80 mr-3">详情</button>
+                    <button class="text-neutral-500 hover:text-neutral-600">编辑</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- 分页 -->
+          <div class="flex items-center justify-between mt-6">
+            <p class="text-sm text-neutral-400">显示 1 至 4 条，共 284 条</p>
+            <el-pagination
+              v-model:current-page="currentPage"
+              :page-size="10"
+              :total="284"
+              layout="prev, pager, next"
+            ></el-pagination>
+          </div>
+        </div>
+        
+        <!-- 待处理异常 - 核心滚动区域 -->
+        <div class="bg-white rounded-xl p-5 card-shadow">
+          <div class="flex items-center justify-between mb-6">
+            <h3 class="font-bold text-neutral-600">待处理异常</h3>
+            <a href="errorOrders.html" class="text-primary hover:text-primary/80 text-sm flex items-center">
+              <span>查看全部</span>
+              <i class="fa fa-angle-right ml-1"></i>
+            </a>
+          </div>
+          
+          <div class="error-scroll-container" id="errorContainer">
+            <div class="error-scroll-content" id="errorScrollContent">
+              <!-- 异常项将通过JS动态加载 -->
+              <div class="error-item">
+                <div class="flex items-start justify-between">
+                  <div>
+                    <div class="flex items-center mb-2">
+                      <span class="text-danger font-medium text-sm">加载中</span>
+                      <span class="text-neutral-400 text-xs ml-2">请稍候</span>
+                    </div>
+                    <p class="text-neutral-600 text-sm mb-2">正在获取异常数据...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="scroll-indicator" id="scrollIndicator">
+              向上滚动中 <i class="fa fa-refresh fa-spin"></i>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    
+    <!-- 加载中遮罩层 -->
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="flex flex-col items-center">
+        <i class="fa fa-circle-o-notch fa-spin text-primary text-3xl mb-2"></i>
+        <p class="text-neutral-600">处理中，请稍候...</p>
+      </div>
+    </div>
+  
+  <script>
+    // 全局存储异常数据
+    window.allErrorData = [];
+    
+    // 初始化水印（确保覆盖整个页面）
+    function initWatermark(username) {
+      const container = document.getElementById('watermarkContainer');
+      if (!container || !username) return;
+      
+      // 清空现有水印
+      container.innerHTML = '';
+      
+      // 获取视窗尺寸，确保水印覆盖整个可见区域
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // 计算水印数量和间距（增加密度确保完全覆盖）
+      const step = 200; // 水印间距（像素）- 更小的间距意味着更密集的水印
+      const horizontalCount = Math.ceil(windowWidth / step) + 1; // 水平方向水印数量
+      const verticalCount = Math.ceil(windowHeight / step) + 1;   // 垂直方向水印数量
+      
+      // 创建水印网格
+      for (let i = 0; i < verticalCount; i++) {
+        for (let j = 0; j < horizontalCount; j++) {
+          const watermark = document.createElement('div');
+          watermark.className = 'watermark-text';
+          watermark.textContent = username;
+          
+          // 计算位置（覆盖整个视窗）
+          const left = j * step - step/2; // 向左偏移一半间距，确保边缘也有覆盖
+          const top = i * step - step/2;  // 向上偏移一半间距
+          
+          // 设置位置和样式
+          watermark.style.left = `${left}px`;
+          watermark.style.top = `${top}px`;
+          
+          container.appendChild(watermark);
+        }
+      }
+    }
+    
+    // 等待DOM完全加载
+    document.addEventListener('DOMContentLoaded', function() {
+      // 创建Vue实例
+      const { createApp, ref } = Vue;
+      const app = createApp({
+        setup() {
+          // 响应式数据
+          const dateRange = ref([]);
+          const currentPage = ref(1);
+          
+          // 初始化图表
+          function initCharts() {
+            const timelinessCtx = document.getElementById('timelinessChart');
+            const channelCtx = document.getElementById('channelChart');
+            
+            if (!timelinessCtx || !channelCtx) return;
+            
+            // 物流时效趋势图
+            new Chart(timelinessCtx.getContext('2d'), {
+              type: 'line',
+              data: {
+                labels: ['6/10', '6/11', '6/12', '6/13', '6/14', '6/15', '6/16'],
+                datasets: [{
+                  label: '上网时效',
+                  data: [1.2, 1.5, 1.3, 1.1, 1.4, 1.2, 1.0],
+                  borderColor: '#165DFF',
+                  backgroundColor: 'rgba(22, 93, 255, 0.1)',
+                  tension: 0.4,
+                  fill: true
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  y: { beginAtZero: true, grid: { color: 'rgba(0, 0, 0, 0.05)' } },
+                  x: { grid: { display: false } }
+                }
+              }
+            });
+            
+            // 渠道分布图
+            new Chart(channelCtx.getContext('2d'), {
+              type: 'doughnut',
+              data: {
+                labels: ['FedEx', 'UPS', 'USPS', 'DHL', '其他'],
+                datasets: [{
+                  data: [35, 25, 20, 15, 5],
+                  backgroundColor: ['#165DFF', '#00B42A', '#FF7D00', '#722ED1', '#86909C'],
+                  borderWidth: 0,
+                  hoverOffset: 4
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { position: 'bottom', labels: { padding: 20, boxWidth: 12 } }
+                },
+                cutout: '70%'
+              }
+            });
+          }
+          
+          // 汉堡菜单切换
+          const menuToggle = document.getElementById('menuToggle');
+          if (menuToggle) {
+            menuToggle.addEventListener('click', () => {
+              const sidebar = document.getElementById('sidebar');
+              if (sidebar) sidebar.classList.toggle('hidden');
+            });
+          }
+          
+          // 初始化图表
+          initCharts();
+          
+          return { dateRange, currentPage };
+        }
+      });
+      
+      // 全局注册Element Plus
+      app.use(ElementPlus);
+      app.mount('#app');
+      
+      // 用户下拉菜单逻辑
+      const userContainer = document.getElementById('userContainer');
+      const userDropdown = document.getElementById('userDropdown');
+      
+      if (userContainer && userDropdown) {
+        userContainer.addEventListener('mouseenter', () => userDropdown.classList.add('active'));
+        userContainer.addEventListener('mouseleave', () => userDropdown.classList.remove('active'));
+      }
+      
+      // 退出登录功能
+      document.getElementById('logoutBtn').addEventListener('click', function() {
+        localStorage.removeItem('hash');
+        localStorage.removeItem('username');
+        localStorage.removeItem('token');
+        checkHash();
+      });
+      
+      // 初始化页面
+      loadPendingErrors().then(() => {
+        startErrorScroll();
+      });
+      
+      // 每5分钟刷新一次异常数据
+      setInterval(() => {
+        loadPendingErrors().then(() => {
+          restartErrorScroll();
+        });
+      }, 300000);
+    });
+    
+    // 异常数据滚动控制变量
+    let scrollInterval;
+    let isScrolling = true;
+    const scrollDelay = 3000; // 滚动间隔时间(毫秒)
+    const itemHeight = 100; // 每条异常数据高度(像素)
+    
+    // 开始滚动
+    function startErrorScroll() {
+      if (scrollInterval) clearInterval(scrollInterval);
+      
+      const container = document.getElementById('errorScrollContent');
+      const items = container.querySelectorAll('.error-item');
+      
+      if (items.length <= 3) {
+        document.getElementById('scrollIndicator').innerHTML = '数据已全部显示';
+        return;
+      }
+      
+      scrollInterval = setInterval(() => {
+        if (isScrolling) scrollOneItem();
+      }, scrollDelay);
+    }
+    
+    // 滚动一条数据
+    function scrollOneItem() {
+      const container = document.getElementById('errorScrollContent');
+      const items = container.querySelectorAll('.error-item');
+      
+      if (items.length <= 3) return;
+      
+      const currentTransform = container.style.transform;
+      let currentY = 0;
+      
+      if (currentTransform) {
+        const match = currentTransform.match(/-?\d+/);
+        if (match) currentY = parseInt(match[0]);
+      }
+      
+      const newY = currentY - itemHeight;
+      const maxScroll = -(items.length - 3) * itemHeight;
+      
+      container.style.transform = newY < maxScroll ? 'translateY(0)' : `translateY(${newY}px)`;
+    }
+    
+    // 重新开始滚动
+    function restartErrorScroll() {
+      document.getElementById('errorScrollContent').style.transform = 'translateY(0)';
+      isScrolling = true;
+      startErrorScroll();
+    }
+    
+    // 加载异常数据
+    async function loadPendingErrors() {
+      const errorContainer = document.getElementById('errorScrollContent');
+      if (!errorContainer) return;
+      
+      try {
+        // 显示加载状态
+        errorContainer.innerHTML = `
+          <div class="error-item">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="flex items-center mb-2">
+                  <span class="text-danger font-medium text-sm">加载中</span>
+                  <span class="text-neutral-400 text-xs ml-2">请稍候</span>
+                </div>
+                <p class="text-neutral-600 text-sm mb-2">正在获取异常数据...</p>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        // 获取两个接口的异常数据
+        const [errorResponse, error1Response] = await Promise.all([
+          fetch('/geterror'),
+          fetch('/geterror1')
+        ]);
+        
+        const errorData = await errorResponse.json();
+        const error1Data = await error1Response.json();
+        
+        // 合并去重数据（排除DK开头客户）
+        const allData = [
+          ...(errorData.success ? errorData.data : []),
+          ...(error1Data.success ? error1Data.data : [])
+        ].filter(item => !item.客户名称?.startsWith('DK'));
+        
+        // 标记数据来源（用于区分处理方式）
+        const error1Ids = error1Data.success 
+          ? error1Data.data.map(item => item.出库单号).filter(Boolean)
+          : [];
+        
+        // 去重数据
+        const uniqueData = Array.from(
+          new Map(allData.map(item => [item.出库单号, item])).values()
+        );
+        
+        // 存储所有异常数据及来源标记
+        window.allErrorData = uniqueData.map(item => ({
+          ...item,
+          isFromError1: error1Ids.includes(item.出库单号)
+        }));
+        
+        // 渲染异常项
+        errorContainer.innerHTML = '';
+        uniqueData.forEach(item => {
+          const isFromError1 = error1Ids.includes(item.出库单号);
+          const buttonText = isFromError1 ? '处理' : '处理';
+          
+          const errorItem = document.createElement('div');
+          errorItem.className = 'error-item';
+          errorItem.innerHTML = `
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="flex items-center mb-2">
+                  <span class="text-danger font-medium text-sm">${item.异常原因 || '未知异常'}</span>
+                  <span class="text-neutral-400 text-xs ml-2">
+                    ${isFromError1 ? '[来自异常面单]' : '[来自异常面单]'}
+                  </span>
+                </div>
+                <p class="text-neutral-600 text-sm mb-2">出库单号: <span class="font-medium">${item.出库单号 || '-'}</span></p>
+                <p class="text-neutral-500 text-xs">${item.客户名称 || '未知客户'} - ${item.仓库 || '未知仓库'}</p>
+              </div>
+              <div>
+                <button class="handle-error-btn px-3 py-1 text-xs bg-primary text-white rounded hover:bg-primary/90 transition-colors"
+                  data-order-no="${item.出库单号}" 
+                  data-from-error1="${isFromError1}">
+                  ${buttonText}
+                </button>
+              </div>
+            </div>
+          `;
+          errorContainer.appendChild(errorItem);
+        });
+
+        // 处理按钮点击事件
+        document.querySelectorAll('.handle-error-btn').forEach(btn => {
+          btn.addEventListener('click', async function() {
+            const orderNo = this.getAttribute('data-order-no');
+            const isFromError1 = this.getAttribute('data-from-error1') === 'true';
+            const loading = document.getElementById('loadingOverlay');
+            
+            try {
+              loading.classList.add('active');
+              
+              if (isFromError1) {
+                const targetItem = window.allErrorData.find(
+                  item => item.出库单号 === orderNo && item.isFromError1
+                );
+                await callGetDingdanCtq([targetItem]);
+              } else {
+                const targetItem = window.allErrorData.find(
+                  item => item.出库单号 === orderNo && !item.isFromError1
+                );
+                await handleCombinedOperations([targetItem]);
+              }
+              
+              await loadPendingErrors();
+              restartErrorScroll();
+              
+            } catch (error) {
+              console.error('处理异常失败:', error);
+              ElementPlus.ElMessage.error(`操作失败: ${error.message || '未知错误'}`);
+            } finally {
+              loading.classList.remove('active');
+            }
+          });
+        });
+        
+        // 绑定鼠标悬停暂停滚动
+        const scrollContainer = document.getElementById('errorContainer');
+        scrollContainer.addEventListener('mouseenter', () => {
+          isScrolling = false;
+          document.getElementById('scrollIndicator').innerHTML = '已暂停 <i class="fa fa-pause"></i>';
+        });
+        
+        scrollContainer.addEventListener('mouseleave', () => {
+          isScrolling = true;
+          document.getElementById('scrollIndicator').innerHTML = '向上滚动中 <i class="fa fa-refresh fa-spin"></i>';
+        });
+        
+        return uniqueData;
+        
+      } catch (error) {
+        console.error('加载异常数据失败:', error);
+        errorContainer.innerHTML = `
+          <div class="error-item">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="flex items-center mb-2">
+                  <span class="text-danger font-medium text-sm">加载失败</span>
+                </div>
+                <p class="text-neutral-600 text-sm mb-2">异常数据加载失败</p>
+                <button onclick="loadPendingErrors()" class="text-primary text-xs hover:underline">
+                  点击重试
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+    
+    // 绑定处理按钮事件
+    function bindHandleButtons() {
+      document.querySelectorAll('.handle-error-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const orderNo = this.getAttribute('data-order-no');
+          const isFromError1 = this.getAttribute('data-from-error1') === 'true';
+          const loading = document.getElementById('loadingOverlay');
+          
+          try {
+            loading.classList.add('active');
+            
+            if (isFromError1) {
+              const targetItem = window.allErrorData.find(
+                item => item.出库单号 === orderNo && item.isFromError1
+              );
+              await handleCombinedOperations([targetItem]);
+            } else {
+              const targetItem = window.allErrorData.find(
+                item => item.出库单号 === orderNo && !item.isFromError1
+              );
+              await callGetDingdanCtq([targetItem]);
+            }
+            
+            await loadPendingErrors();
+            restartErrorScroll();
+            
+          } catch (error) {
+            console.error('处理异常失败:', error);
+            ElementPlus.ElMessage.error(`操作失败: ${error.message || '未知错误'}`);
+          } finally {
+            loading.classList.remove('active');
+          }
+        });
+      });
+    }
+    
+    // 一键重推
+    async function handleCombinedOperations(selectedData) {
+      if (selectedData.length === 0) {
+        throw new Error('请至少选择一条数据');
+      }
+      
+      const customerCodes = selectedData.map(item => item.客户代码);
+      const firstCode = customerCodes[0];
+      if (!customerCodes.every(code => code === firstCode)) {
+        throw new Error('请选择同一客户的订单');
+      }
+      
+      try {
+        const response = await fetch(`/geterror_dingdan?customerCode=${firstCode}`);
+        const result = await response.json();
+        
+        if (!result.success) throw new Error(result.error || '获取用户信息失败');
+        localStorage.setItem('kh_token', result.data.data.token);
+      } catch (error) {
+        throw new Error(`获取客户信息失败: ${error.message}`);
+      }
+      
+      const outboundOrderNos = selectedData.map(item => item.出库单号).join(',');
+      const token = localStorage.getItem('kh_token');
+      
+      try {
+        const response = await fetch(`/geterror_dingdancaogao?outboundOrderNos=${outboundOrderNos}&authorizationToken=${token}`);
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || '转草稿失败');
+      } catch (error) {
+        throw new Error(`转草稿失败: ${error.message}`);
+      }
+      
+      try {
+        const response = await fetch(`/geterror_dingdanct?outboundOrderNos=${outboundOrderNos}&authorizationToken=${token}`);
+        const result = await response.json();
+        
+        if (result.success) {
+          ElementPlus.ElMessage.success(`一键重推成功！共处理 ${selectedData.length} 条订单`);
+        } else {
+          throw new Error(result.error || '重推订单失败');
+        }
+      } catch (error) {
+        throw new Error(`重推订单失败: ${error.message}`);
+      }
+    }
+    
+    // 异常面单重推
+    async function callGetDingdanCtq(selectedData) {
+      if (selectedData.length === 0) {
+        throw new Error('没有可重推的异常面单数据');
+      }
+      
+      try {
+        const response = await fetch('/get_dingdanctq', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderLists: selectedData })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+          ElementPlus.ElMessage.success(`异常面单重推成功！共处理 ${selectedData.length} 条数据`);
+        } else {
+          throw new Error(result.error || '未知错误');
+        }
+      } catch (error) {
+        throw new Error(`请求失败: ${error.message}`);
+      }
+    }
+    
+    // 登录状态检查
+    function checkHash() {
+      if (!localStorage.getItem('hash')) {
+        alert('会话已过期，请重新登录');
+        window.location.href = 'http://wdbso.vip/index-login.html';
+      }
+    }
+    
+    // 重定向到登录页
+    function redirectToLogin() {
+      localStorage.removeItem('hash');
+      alert('会话已过期，请重新登录');
+      window.location.href = 'http://wdbso.vip/index-login.html';
+    }
+  </script>
+</body>
+</html>

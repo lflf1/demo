@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>富海海外仓客服满意度评价</title>
+    <script src="/js/tailwindcss.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <!-- 配置Tailwind自定义颜色和字体 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                        secondary: '#36BFFA',
+                        neutral: '#F5F7FA',
+                        dark: '#1D2129',
+                        light: '#F2F3F5',
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .star-transition {
+                transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), 
+                            color 0.2s ease,
+                            text-shadow 0.2s ease;
+            }
+            .star-hover {
+                transform: scale(1.2);
+                text-shadow: 0 2px 8px rgba(22, 93, 255, 0.3);
+            }
+            .card-shadow {
+                box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1);
+                transition: box-shadow 0.3s ease, transform 0.3s ease;
+            }
+            .card-shadow:hover {
+                box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.15);
+                transform: translateY(-2px);
+            }
+            .btn-transition {
+                transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+            .progress-transition {
+                transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
+                           background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .step-transition {
+                transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .text-fade {
+                transition: opacity 0.4s ease, transform 0.4s ease;
+            }
+            .slide-in {
+                animation: slideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            }
+            .slide-out {
+                animation: slideOut 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            }
+            .fade-in {
+                animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            }
+            .auto-fill-animation {
+                animation: pulse 0.6s ease-in-out;
+            }
+            .shake {
+                animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+            }
+            .loading-spinner {
+                border-top-color: #165DFF;
+                animation: spinner 0.8s linear infinite;
+            }
+            @keyframes slideIn {
+                from { 
+                    transform: translateX(50px); 
+                    opacity: 0;
+                    filter: blur(4px);
+                }
+                to { 
+                    transform: translateX(0); 
+                    opacity: 1;
+                    filter: blur(0);
+                }
+            }
+            @keyframes slideOut {
+                from { 
+                    transform: translateX(0); 
+                    opacity: 1;
+                    filter: blur(0);
+                }
+                to { 
+                    transform: translateX(-50px); 
+                    opacity: 0;
+                    filter: blur(4px);
+                }
+            }
+            @keyframes fadeIn {
+                from { 
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                to { 
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.05); }
+                100% { transform: scale(1); }
+            }
+            @keyframes shake {
+                10%, 90% { transform: translateX(-1px); }
+                20%, 80% { transform: translateX(2px); }
+                30%, 50%, 70% { transform: translateX(-3px); }
+                40%, 60% { transform: translateX(3px); }
+            }
+            @keyframes spinner {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        }
+    </style>
+</head>
+<body class="font-inter bg-neutral min-h-screen flex flex-col">
+    <!-- 顶部导航 -->
+    <header class="bg-white shadow-sm sticky top-0 z-10 transition-all duration-300">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-truck text-primary text-2xl transition-transform duration-300 hover:rotate-12"></i>
+                <h1 class="text-lg md:text-xl font-bold text-dark">富海海外仓服务中心</h1>
+            </div>
+            <button class="text-gray-500 hover:text-primary transition-colors p-2 rounded-full hover:bg-primary/5">
+                <i class="fa fa-question-circle text-xl"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="flex-grow container mx-auto px-4 py-6 md:py-10">
+        <!-- 登录验证界面 -->
+        <div id="login-section" class="max-w-2xl mx-auto bg-white rounded-2xl p-6 md:p-8 card-shadow step-transition">
+            <div class="text-center mb-8">
+                <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-dark mb-2 text-fade">客户身份验证</h2>
+                <p class="text-gray-500 text-fade">请输入您的客户代码以继续评价</p>
+                <p class="text-red-500 text-sm mt-2 hidden" id="login-error">客户代码不存在或当前时间段不允许评价</p>
+                <p class="text-blue-500 text-sm mt-2 text-fade">
+                    <i class="fa fa-info-circle"></i> 仅每月28日 9:00-18:00可提交评价
+                </p>
+            </div>
+
+            <div class="mb-6">
+                <label for="customer-code" class="block text-gray-700 font-medium mb-2 text-fade">客户代码</label>
+                <input 
+                    type="text" 
+                    id="customer-code" 
+                    class="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all outline-none"
+                    placeholder="请输入您的客户代码"
+                >
+            </div>
+
+            <button 
+                id="login-btn" 
+                class="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 px-4 rounded-lg btn-transition transform active:scale-98"
+            >
+                验证并进入评价
+            </button>
+        </div>
+
+        <!-- 评价内容区（默认隐藏） -->
+        <div id="evaluation-section" class="hidden">
+            <!-- 进度指示器 -->
+            <div class="max-w-2xl mx-auto mb-8">
+                <div class="flex justify-between items-center">
+                    <div id="step-indicator-1" class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-medium step-transition">1</div>
+                    <div id="progress-1-2" class="flex-grow h-1 mx-2 bg-gray-200 progress-transition"></div>
+                    <div id="step-indicator-2" class="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-medium step-transition">2</div>
+                    <div id="progress-2-3" class="flex-grow h-1 mx-2 bg-gray-200 progress-transition"></div>
+                    <div id="step-indicator-3" class="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-medium step-transition">3</div>
+                </div>
+                <div class="flex justify-between mt-2 text-xs text-gray-500">
+                    <span id="step-text-1" class="font-medium text-primary text-fade">评价服务</span>
+                    <span id="step-text-2" class="text-fade">详细反馈</span>
+                    <span id="step-text-3" class="text-fade">完成</span>
+                </div>
+            </div>
+
+            <!-- 评价卡片容器 -->
+            <div class="max-w-2xl mx-auto relative min-h-[500px]">
+                <!-- 步骤1：评价服务 -->
+                <div id="step-1" class="bg-white rounded-2xl p-6 md:p-8 card-shadow absolute w-full step-transition">
+                    <div class="text-center mb-8">
+                        <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-dark mb-2 text-fade">请评价我们的客服服务</h2>
+                        <p class="text-gray-500 text-fade">您的反馈对我们非常重要，将帮助我们提升服务质量</p>
+                    </div>
+
+                    <!-- 总体评分 -->
+                    <div class="mb-10">
+                        <h3 class="text-lg font-semibold text-dark mb-4 text-center text-fade">总体满意度</h3>
+                        <div class="flex justify-center space-x-2 md:space-x-4 star-group" data-group="overall">
+                            <i class="fa fa-star text-3xl md:text-4xl text-gray-300 cursor-pointer star-transition" data-value="1"></i>
+                            <i class="fa fa-star text-3xl md:text-4xl text-gray-300 cursor-pointer star-transition" data-value="2"></i>
+                            <i class="fa fa-star text-3xl md:text-4xl text-gray-300 cursor-pointer star-transition" data-value="3"></i>
+                            <i class="fa fa-star text-3xl md:text-4xl text-gray-300 cursor-pointer star-transition" data-value="4"></i>
+                            <i class="fa fa-star text-3xl md:text-4xl text-gray-300 cursor-pointer star-transition" data-value="5"></i>
+                        </div>
+                        <div class="text-center mt-4 h-6">
+                            <span id="overall-rating-text" class="text-gray-500 font-medium text-fade"></span>
+                        </div>
+                        <p class="text-center text-xs text-gray-400 mt-2">选择后将自动填充其他评价项</p>
+                    </div>
+
+                    <!-- 具体评价维度 -->
+                    <div class="space-y-6 mb-8">
+                        <h3 class="text-lg font-semibold text-dark mb-2 text-fade">请评价以下方面</h3>
+                        
+                        <!-- 响应速度 -->
+                        <div class="step-transition">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="text-gray-700 font-medium flex items-center">
+                                    <i class="fa fa-clock-o text-primary mr-2"></i>响应速度
+                                </label>
+                                <span class="dimension-rating text-sm text-gray-500" data-dimension="speed">未评分</span>
+                            </div>
+                            <div class="flex justify-between star-group" data-group="speed">
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="1"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="2"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="3"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="4"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="5"></i>
+                            </div>
+                        </div>
+                        
+                        <!-- 解决能力 -->
+                        <div class="step-transition">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="text-gray-700 font-medium flex items-center">
+                                    <i class="fa fa-wrench text-primary mr-2"></i>问题解决能力
+                                </label>
+                                <span class="dimension-rating text-sm text-gray-500" data-dimension="solution">未评分</span>
+                            </div>
+                            <div class="flex justify-between star-group" data-group="solution">
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="1"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="2"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="3"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="4"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="5"></i>
+                            </div>
+                        </div>
+                        
+                        <!-- 专业程度 -->
+                        <div class="step-transition">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="text-gray-700 font-medium flex items-center">
+                                    <i class="fa fa-graduation-cap text-primary mr-2"></i>专业程度
+                                </label>
+                                <span class="dimension-rating text-sm text-gray-500" data-dimension="professionalism">未评分</span>
+                            </div>
+                            <div class="flex justify-between star-group" data-group="professionalism">
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="1"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="2"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="3"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="4"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="5"></i>
+                            </div>
+                        </div>
+                        
+                        <!-- 服务态度 -->
+                        <div class="step-transition">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="text-gray-700 font-medium flex items-center">
+                                    <i class="fa fa-smile-o text-primary mr-2"></i>服务态度
+                                </label>
+                                <span class="dimension-rating text-sm text-gray-500" data-dimension="attitude">未评分</span>
+                            </div>
+                            <div class="flex justify-between star-group" data-group="attitude">
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="1"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="2"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="3"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="4"></i>
+                                <i class="fa fa-star text-xl text-gray-300 cursor-pointer star-transition" data-value="5"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 步骤导航按钮 -->
+                    <button 
+                        id="to-step-2" 
+                        class="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 px-4 rounded-lg btn-transition transform active:scale-98 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                        disabled
+                    >
+                        下一步：详细反馈
+                    </button>
+                </div>
+
+                <!-- 步骤2：详细反馈 -->
+                <div id="step-2" class="bg-white rounded-2xl p-6 md:p-8 card-shadow absolute w-full step-transition opacity-0 pointer-events-none">
+                    <div class="text-center mb-8">
+                        <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-dark mb-2 text-fade">详细反馈</h2>
+                        <p class="text-gray-500 text-fade">请分享您的具体体验和建议，帮助我们改进服务</p>
+                    </div>
+
+                    <!-- 反馈类型选择 -->
+                    <div class="mb-6 step-transition">
+                        <label class="block text-gray-700 font-medium mb-3 text-fade">反馈类型</label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-primary transition-colors btn-transition">
+                                <input type="radio" name="feedback-type" value="praise" class="w-4 h-4 text-primary focus:ring-primary">
+                                <span class="ml-2">表扬与肯定</span>
+                            </label>
+                            <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-primary transition-colors btn-transition">
+                                <input type="radio" name="feedback-type" value="suggestion" class="w-4 h-4 text-primary focus:ring-primary">
+                                <span class="ml-2">建议与改进</span>
+                            </label>
+                            <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-primary transition-colors btn-transition">
+                                <input type="radio" name="feedback-type" value="complaint" class="w-4 h-4 text-primary focus:ring-primary">
+                                <span class="ml-2">投诉与问题</span>
+                            </label>
+                            <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-primary transition-colors btn-transition">
+                                <input type="radio" name="feedback-type" value="other" class="w-4 h-4 text-primary focus:ring-primary">
+                                <span class="ml-2">其他反馈</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 文字评价 -->
+                    <div class="mb-6 step-transition">
+                        <label for="detailed-feedback" class="block text-gray-700 font-medium mb-2 text-fade">详细描述</label>
+                        <textarea 
+                            id="detailed-feedback" 
+                            rows="6" 
+                            class="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all outline-none resize-none btn-transition"
+                            placeholder="请详细描述您的体验、遇到的问题或建议..."
+                        ></textarea>
+                        <div class="flex justify-end mt-1">
+                            <span id="detail-char-count" class="text-xs text-gray-500">0/1000</span>
+                        </div>
+                    </div>
+
+                    <!-- 联系方式 -->
+                    <div class="mb-8 step-transition">
+                        <label class="flex items-center text-gray-700 font-medium mb-2 cursor-pointer btn-transition">
+                            <input type="checkbox" id="contact-option-step2" class="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded">
+                            <span class="ml-2">希望客服专员跟进您的反馈</span>
+                        </label>
+                    </div>
+
+                    <!-- 步骤导航按钮 -->
+                    <div class="flex space-x-3">
+                        <button 
+                            id="back-to-step-1" 
+                            class="flex-1 bg-white border border-gray-300 text-gray-700 font-medium py-3 px-4 rounded-lg btn-transition hover:bg-gray-50"
+                        >
+                            <i class="fa fa-arrow-left mr-1"></i> 上一步
+                        </button>
+                        <button 
+                            id="to-step-3" 
+                            class="flex-1 bg-primary hover:bg-primary/90 text-white font-medium py-3 px-4 rounded-lg btn-transition transform active:scale-98"
+                        >
+                            <span id="submit-btn-text">提交评价</span>
+                            <div id="submit-loading" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full loading-spinner ml-2"></div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 步骤3：完成页面 -->
+                <div id="step-3" class="bg-white rounded-2xl p-6 md:p-8 card-shadow absolute w-full step-transition opacity-0 pointer-events-none text-center">
+                    <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 fade-in">
+                        <i class="fa fa-check text-green-500 text-3xl"></i>
+                    </div>
+                    
+                    <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-dark mb-3 text-fade">感谢您的反馈！</h2>
+                    
+                    <p class="text-gray-500 mb-6 text-fade">您的评价已成功提交，我们将认真对待每一条反馈</p>
+                    
+                    <!-- 如果用户选择了需要跟进，显示相关提示 -->
+                    <div id="follow-up-notice" class="hidden bg-blue-50 border border-blue-100 rounded-xl p-4 mb-8 step-transition">
+                        <p class="text-blue-700 text-sm">
+                            <i class="fa fa-info-circle mr-1"></i>
+                            您已选择需要客服专员跟进，我们将尽快与您联系
+                        </p>
+                    </div>
+                    
+                    <!-- 提交时间显示 - 完全依赖后端接口返回的时间 -->
+                    <div class="bg-light rounded-xl p-4 mb-4 step-transition">
+                        <p class="text-gray-600 text-sm">
+                            <i class="fa fa-clock-o text-primary mr-1"></i>
+                            提交时间: <span class="font-medium text-primary" id="submit-time-display">-</span>
+                        </p>
+                    </div>
+                    
+                    <div class="bg-light rounded-xl p-4 mb-8 step-transition">
+                        <p class="text-gray-600 text-sm">
+                            评价编号: <span class="font-medium text-primary" id="feedback-id">-</span>
+                        </p>
+                    </div>
+                    
+                    <div class="mb-8 step-transition">
+                        <h3 class="font-semibold text-gray-700 mb-3 text-fade">您的评分摘要</h3>
+                        <div class="grid grid-cols-2 gap-4 max-w-md mx-auto">
+                            <div class="bg-light rounded-lg p-3 btn-transition hover:shadow-md">
+                                <p class="text-sm text-gray-500">总体满意度</p>
+                                <p class="text-lg font-bold text-primary" id="summary-overall">--</p>
+                            </div>
+                            <div class="bg-light rounded-lg p-3 btn-transition hover:shadow-md">
+                                <p class="text-sm text-gray-500">响应速度</p>
+                                <p class="text-lg font-bold text-primary" id="summary-speed">--</p>
+                            </div>
+                            <div class="bg-light rounded-lg p-3 btn-transition hover:shadow-md">
+                                <p class="text-sm text-gray-500">解决能力</p>
+                                <p class="text-lg font-bold text-primary" id="summary-solution">--</p>
+                            </div>
+                            <div class="bg-light rounded-lg p-3 btn-transition hover:shadow-md">
+                                <p class="text-sm text-gray-500">服务态度</p>
+                                <p class="text-lg font-bold text-primary" id="summary-attitude">--</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button 
+                        id="finish-btn" 
+                        class="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 px-4 rounded-lg btn-transition transform active:scale-98"
+                    >
+                        完成
+                    </button>
+                </div>
+            </div>
+
+            <!-- 帮助信息 -->
+            <div class="max-w-2xl mx-auto mt-6 bg-light rounded-xl p-4 text-center step-transition">
+                <p class="text-gray-600 text-sm">
+                    <i class="fa fa-info-circle text-primary mr-1"></i>
+                    您的评价将严格保密，仅用于提升我们的服务质量
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white mt-10 py-6 border-t border-gray-100">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-gray-500 text-sm">© 2025 富海海外仓服务中心 版权所有</p>
+            <div class="flex justify-center space-x-4 mt-3">
+                <a href="#" class="text-gray-400 hover:text-primary transition-colors btn-transition p-1">
+                    <i class="fa fa-question-circle"></i> 帮助中心
+                </a>
+                <a href="#" class="text-gray-400 hover:text-primary transition-colors btn-transition p-1">
+                    <i class="fa fa-file-text-o"></i> 服务条款
+                </a>
+                <a href="#" class="text-gray-400 hover:text-primary transition-colors btn-transition p-1">
+                    <i class="fa fa-shield"></i> 隐私政策
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // 全局变量存储有效的客户代码列表
+        let validCustomerCodes = [];
+        // 当前登录的客户代码
+        let currentCustomerCode = '';
+        // 存储接口返回的服务器时间和评价编号
+        let serverSubmitTime = null;
+        let serverEvaluationId = null;
+        
+        // 存储评分数据
+        const ratings = {
+            overall: 0,
+            speed: 0,
+            solution: 0,
+            professionalism: 0,
+            attitude: 0
+        };
+        
+        // 评分文本
+        const ratingTexts = ['非常不满意', '不满意', '一般', '满意', '非常满意'];
+        
+        // DOM元素
+        const loginSection = document.getElementById('login-section');
+        const evaluationSection = document.getElementById('evaluation-section');
+        const customerCodeInput = document.getElementById('customer-code');
+        const loginBtn = document.getElementById('login-btn');
+        const loginError = document.getElementById('login-error');
+        const starGroups = document.querySelectorAll('.star-group');
+        const overallRatingText = document.getElementById('overall-rating-text');
+        const dimensionRatings = document.querySelectorAll('.dimension-rating');
+        const toStep2Btn = document.getElementById('to-step-2');
+        const backToStep1Btn = document.getElementById('back-to-step-1');
+        const toStep3Btn = document.getElementById('to-step-3');
+        const finishBtn = document.getElementById('finish-btn');
+        const detailedFeedback = document.getElementById('detailed-feedback');
+        const detailCharCount = document.getElementById('detail-char-count');
+        const contactOptionStep2 = document.getElementById('contact-option-step2');
+        const followUpNotice = document.getElementById('follow-up-notice');
+        const submitBtnText = document.getElementById('submit-btn-text');
+        const submitLoading = document.getElementById('submit-loading');
+        
+        // 步骤元素
+        const step1 = document.getElementById('step-1');
+        const step2 = document.getElementById('step-2');
+        const step3 = document.getElementById('step-3');
+        
+        // 步骤指示器
+        const stepIndicators = {
+            1: document.getElementById('step-indicator-1'),
+            2: document.getElementById('step-indicator-2'),
+            3: document.getElementById('step-indicator-3')
+        };
+        
+        const stepTexts = {
+            1: document.getElementById('step-text-1'),
+            2: document.getElementById('step-text-2'),
+            3: document.getElementById('step-text-3')
+        };
+        
+        const progressBars = {
+            '1-2': document.getElementById('progress-1-2'),
+            '2-3': document.getElementById('progress-2-3')
+        };
+        
+        // 摘要元素
+        const summaryElements = {
+            overall: document.getElementById('summary-overall'),
+            speed: document.getElementById('summary-speed'),
+            solution: document.getElementById('summary-solution'),
+            attitude: document.getElementById('summary-attitude')
+        };
+        
+        // 初始化 - 加载有效的客户代码
+        async function init() {
+            try {
+                // 仅加载客户信息，移除服务器时间获取逻辑
+                const customerResponse = await fetch('/customer_info1');
+                const customerData = await customerResponse.json();
+                
+                if (customerData.success && customerData.data && customerData.data.length > 0) {
+                    validCustomerCodes = customerData.data.map(customer => 
+                        customer.客户名称 ? customer.客户名称.trim() : ''
+                    ).filter(code => code);
+                }
+                
+            } catch (error) {
+                console.error('加载初始化数据失败:', error);
+                alert('系统初始化失败，请刷新页面重试');
+            }
+            
+            // 初始化登录功能
+            initLogin();
+        }
+        
+        // 初始化登录功能
+        function initLogin() {
+            // 登录按钮点击事件
+            loginBtn.addEventListener('click', async function() {
+                const code = customerCodeInput.value.trim();
+                
+                if (!code) {
+                    showLoginError('请输入客户代码');
+                    return;
+                }
+                
+                // 1. 检查时间段是否有效（仅使用本地时间）
+                if (!isValidTime(new Date())) {
+                    showLoginError('仅每月28日 9:00-18:00可提交评价');
+                    return;
+                }
+                
+                // 2. 检查客户代码是否有效
+                if (!validCustomerCodes.includes(code)) {
+                    showLoginError('客户代码不存在');
+                    return;
+                }
+                
+                // 3. 检查当月是否已评价
+                try {
+                    const isEvaluated = await checkMonthlyEvaluation(code);
+                    if (isEvaluated) {
+                        showLoginError('您本月已提交过评价，无法再次评价');
+                        return;
+                    }
+                } catch (error) {
+                    console.error('检查评价状态失败:', error);
+                    showLoginError('系统查询失败，请稍后重试');
+                    return;
+                }
+                
+                // 4. 所有验证通过，进入评价界面
+                currentCustomerCode = code;
+                loginError.classList.add('hidden');
+                
+                loginSection.classList.add('slide-out');
+                setTimeout(() => {
+                    loginSection.classList.add('hidden');
+                    evaluationSection.classList.remove('hidden');
+                    evaluationSection.classList.add('slide-in');
+                    initEvaluation();
+                }, 300);
+            });
+            
+            // 回车键登录
+            customerCodeInput.addEventListener('keyup', function(e) {
+                if (e.key === 'Enter') {
+                    loginBtn.click();
+                }
+            });
+        }
+        
+        // 检查是否在有效的时间段内（每月28号9:00-18:00）- 仅使用本地时间
+        function isValidTime(date) {
+            const day = date.getDate();
+            const hour = date.getHours();
+            
+            // 仅允许每月28号的9:00-18:00评价
+            return day === 28 && hour >= 9 && hour < 19;
+        }
+        
+        // 检查客户当月是否已评价
+        async function checkMonthlyEvaluation(customerCode) {
+            const date = new Date(); // 使用本地时间
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const evaluationMonth = `${year}-${month}`; // 格式：YYYY-MM
+            
+            const response = await fetch('/feedback_check', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    customerCode: customerCode,
+                    evaluationMonth: evaluationMonth
+                })
+            });
+            
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || '查询评价状态失败');
+            }
+            
+            return result.data.hasEvaluated; // 返回布尔值：true=已评价，false=未评价
+        }
+        
+        // 显示登录错误信息
+        function showLoginError(message) {
+            loginError.textContent = message;
+            loginError.classList.remove('hidden');
+            customerCodeInput.classList.add('shake', 'border-red-500');
+            
+            setTimeout(() => {
+                customerCodeInput.classList.remove('shake', 'border-red-500');
+            }, 500);
+        }
+        
+        // 初始化评价功能
+        function initEvaluation() {
+            initStarRating();
+            goToStep(1);
+            initPageAnimations();
+            initEventListeners();
+        }
+        
+        // 初始化星级评分事件
+        function initStarRating() {
+            // 为每个星星组添加事件委托
+            starGroups.forEach(group => {
+                const groupName = group.getAttribute('data-group');
+                
+                // 鼠标进入星星
+                group.addEventListener('mouseover', function(e) {
+                    const star = e.target.closest('.fa-star');
+                    if (!star) return;
+                    
+                    const value = parseInt(star.getAttribute('data-value'));
+                    highlightStarsInGroup(group, value);
+                    
+                    // 更新显示文本
+                    if (groupName === 'overall') {
+                        overallRatingText.textContent = ratingTexts[value - 1];
+                        // 添加淡入动画
+                        overallRatingText.style.opacity = 0;
+                        setTimeout(() => {
+                            overallRatingText.style.opacity = 1;
+                        }, 50);
+                    } else {
+                        const ratingText = document.querySelector(`.dimension-rating[data-dimension="${groupName}"]`);
+                        ratingText.textContent = `${value}星`;
+                        ratingText.classList.add('text-primary');
+                    }
+                });
+                
+                // 鼠标离开星星组
+                group.addEventListener('mouseout', function() {
+                    const currentRating = ratings[groupName];
+                    highlightStarsInGroup(group, currentRating);
+                    
+                    // 恢复显示文本
+                    if (groupName === 'overall') {
+                        if (currentRating > 0) {
+                            overallRatingText.textContent = ratingTexts[currentRating - 1];
+                        } else {
+                            overallRatingText.textContent = '';
+                        }
+                    } else {
+                        const ratingText = document.querySelector(`.dimension-rating[data-dimension="${groupName}"]`);
+                        if (currentRating > 0) {
+                            ratingText.textContent = `${currentRating}星`;
+                            ratingText.classList.add('text-primary');
+                        } else {
+                            ratingText.textContent = '未评分';
+                            ratingText.classList.remove('text-primary');
+                        }
+                    }
+                });
+                
+                // 点击星星
+                group.addEventListener('click', function(e) {
+                    const star = e.target.closest('.fa-star');
+                    if (!star) return;
+                    
+                    const value = parseInt(star.getAttribute('data-value'));
+                    ratings[groupName] = value;
+                    highlightStarsInGroup(group, value);
+                    
+                    // 添加点击反馈动画
+                    star.classList.add('scale-130');
+                    setTimeout(() => {
+                        star.classList.remove('scale-130');
+                    }, 200);
+                    
+                    // 更新显示文本
+                    if (groupName === 'overall') {
+                        overallRatingText.textContent = ratingTexts[value - 1];
+                        
+                        // 自动填充其他评分项
+                        autoFillOtherRatings(value);
+                    } else {
+                        const ratingText = document.querySelector(`.dimension-rating[data-dimension="${groupName}"]`);
+                        ratingText.textContent = `${value}星`;
+                        ratingText.classList.add('text-primary');
+                    }
+                    
+                    // 检查是否可以进入下一步
+                    checkStep2Enabled();
+                });
+                
+                // 星星悬停动画
+                group.addEventListener('mouseenter', function(e) {
+                    const star = e.target.closest('.fa-star');
+                    if (star) {
+                        star.classList.add('star-hover');
+                    }
+                });
+                
+                group.addEventListener('mouseleave', function(e) {
+                    const star = e.target.closest('.fa-star');
+                    if (star) {
+                        star.classList.remove('star-hover');
+                    }
+                });
+            });
+        }
+        
+        // 自动填充其他评分项
+        function autoFillOtherRatings(value) {
+            // 需要自动填充的评分项
+            const otherGroups = ['speed', 'solution', 'professionalism', 'attitude'];
+            
+            // 逐个填充，添加延迟产生动画效果
+            otherGroups.forEach((groupName, index) => {
+                setTimeout(() => {
+                    // 更新数据
+                    ratings[groupName] = value;
+                    
+                    // 更新UI
+                    const group = document.querySelector(`.star-group[data-group="${groupName}"]`);
+                    highlightStarsInGroup(group, value);
+                    
+                    // 更新评分文本
+                    const ratingText = document.querySelector(`.dimension-rating[data-dimension="${groupName}"]`);
+                    ratingText.textContent = `${value}星`;
+                    ratingText.classList.add('text-primary');
+                    
+                    // 添加动画效果
+                    const stars = group.querySelectorAll('.fa-star');
+                    stars.forEach(star => {
+                        if (parseInt(star.getAttribute('data-value')) <= value) {
+                            star.classList.add('auto-fill-animation');
+                            setTimeout(() => {
+                                star.classList.remove('auto-fill-animation');
+                            }, 600);
+                        }
+                    });
+                    
+                    // 最后一个评分项填充完成后检查是否可以进入下一步
+                    if (index === otherGroups.length - 1) {
+                        checkStep2Enabled();
+                    }
+                }, index * 100); // 每个项目间隔100ms，产生顺序动画
+            });
+        }
+        
+        // 高亮星星组中的星星
+        function highlightStarsInGroup(group, count) {
+            const stars = group.querySelectorAll('.fa-star');
+            stars.forEach((star, index) => {
+                const starValue = parseInt(star.getAttribute('data-value'));
+                
+                if (starValue <= count) {
+                    star.classList.remove('text-gray-300');
+                    star.classList.add('text-primary');
+                } else {
+                    star.classList.remove('text-primary');
+                    star.classList.add('text-gray-300');
+                }
+            });
+        }
+        
+        // 检查是否可以进入第二步
+        function checkStep2Enabled() {
+            // 检查是否所有评分都已完成
+            const allRated = ratings.overall > 0 && 
+                           ratings.speed > 0 && 
+                           ratings.solution > 0 && 
+                           ratings.professionalism > 0 && 
+                           ratings.attitude > 0;
+            
+            // 平滑启用按钮
+            if (allRated && toStep2Btn.disabled) {
+                toStep2Btn.disabled = false;
+                toStep2Btn.classList.add('fade-in');
+            } else if (!allRated && !toStep2Btn.disabled) {
+                toStep2Btn.disabled = true;
+            }
+        }
+        
+        // 初始化事件监听器
+        function initEventListeners() {
+            // 字符计数
+            detailedFeedback.addEventListener('input', function() {
+                const length = this.value.length;
+                detailCharCount.textContent = `${length}/1000`;
+                
+                // 限制最大长度
+                if (length > 1000) {
+                    this.value = this.value.substring(0, 1000);
+                    detailCharCount.textContent = '1000/1000';
+                }
+            });
+            
+            // 步骤按钮事件
+            toStep2Btn.addEventListener('click', function() {
+                step1.classList.add('slide-out');
+                setTimeout(() => goToStep(2), 300);
+            });
+            
+            backToStep1Btn.addEventListener('click', function() {
+                step2.classList.add('slide-out');
+                setTimeout(() => goToStep(1), 300);
+            });
+            
+            toStep3Btn.addEventListener('click', async function() {
+                // 显示加载状态
+                toStep3Btn.disabled = true;
+                submitBtnText.textContent = '提交中...';
+                submitLoading.classList.remove('hidden');
+                
+                // 收集表单数据
+                const formData = {
+                    customerCode: currentCustomerCode,
+                    ratings: ratings, // 包含overall、speed等所有评分
+                    feedbackType: document.querySelector('input[name="feedback-type"]:checked')?.value || 'other',
+                    detailedFeedback: detailedFeedback.value,
+                    contactRequested: contactOptionStep2.checked,
+                    deviceInfo: getDeviceInfo() // 新增
+                };
+                
+                try {
+                    // 提交评价数据到后端
+                    const response = await fetch('/pj_submit', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(formData)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (!result.success) {
+                        throw new Error(result.message || '提交评价失败');
+                    }
+                    
+                    // 验证接口返回的数据完整性
+                    if (!result.data || !result.data.submitTime || !result.data.evaluationId) {
+                        throw new Error('提交成功，但返回数据不完整，请联系客服确认');
+                    }
+                    
+                    // 从接口响应中获取服务器时间和评价编号
+                    serverSubmitTime = result.data.submitTime;
+                    serverEvaluationId = result.data.evaluationId;
+                    
+                    // 隐藏加载状态并进入下一步
+                    step2.classList.add('slide-out');
+                    setTimeout(() => goToStep(3), 300);
+                    
+                } catch (error) {
+                    console.error('提交评价失败:', error);
+                    alert('提交评价失败: ' + error.message);
+                    
+                    // 恢复按钮状态
+                    toStep3Btn.disabled = false;
+                    submitBtnText.textContent = '提交评价';
+                    submitLoading.classList.add('hidden');
+                }
+            });
+            
+            finishBtn.addEventListener('click', function() {
+                // 添加按钮点击效果
+                this.classList.add('scale-95');
+                setTimeout(() => {
+                    this.classList.remove('scale-95');
+                    // 返回登录界面
+                    window.location.reload();
+                }, 200);
+            });
+        }
+        
+        // 步骤导航
+        function goToStep(stepNumber) {
+            // 隐藏所有步骤
+            [step1, step2, step3].forEach(step => {
+                step.classList.add('opacity-0', 'pointer-events-none');
+                step.classList.remove('slide-in', 'slide-out');
+            });
+            
+            // 重置所有指示器
+            Object.values(stepIndicators).forEach(indicator => {
+                indicator.className = 'w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-medium step-transition';
+            });
+            
+            Object.values(stepTexts).forEach(text => {
+                text.className = 'text-xs text-gray-500 text-fade';
+            });
+            
+            Object.values(progressBars).forEach(bar => {
+                bar.className = 'flex-grow h-1 mx-2 bg-gray-200 progress-transition';
+            });
+            
+            // 更新当前步骤指示器
+            for (let i = 1; i <= stepNumber; i++) {
+                stepIndicators[i].className = 'w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-medium step-transition transform scale-110';
+                setTimeout(() => {
+                    stepIndicators[i].classList.remove('scale-110');
+                }, 300);
+                stepTexts[i].className = 'text-xs font-medium text-primary text-fade';
+            }
+            
+            // 更新进度条
+            if (stepNumber >= 2) {
+                progressBars['1-2'].className = 'flex-grow h-1 mx-2 bg-primary progress-transition';
+            }
+            if (stepNumber >= 3) {
+                progressBars['2-3'].className = 'flex-grow h-1 mx-2 bg-primary progress-transition';
+            }
+            
+            // 显示当前步骤
+            const currentStep = document.getElementById(`step-${stepNumber}`);
+            currentStep.classList.remove('opacity-0', 'pointer-events-none');
+            currentStep.classList.add('slide-in');
+            
+            // 如果是第三步，更新摘要信息
+            if (stepNumber === 3) {
+                updateSummary();
+                displayEvaluationId();  // 显示从服务器获取的评价编号
+                displayServerSubmitTime(); // 显示接口返回的时间
+                
+                // 显示跟进提示（如果用户选择了）
+                if (contactOptionStep2.checked) {
+                    followUpNotice.classList.remove('hidden');
+                    followUpNotice.classList.add('fade-in');
+                } else {
+                    followUpNotice.classList.add('hidden');
+                }
+                
+                // 恢复提交按钮状态（如果用户返回此页面）
+                toStep3Btn.disabled = false;
+                submitBtnText.textContent = '提交评价';
+                submitLoading.classList.add('hidden');
+            }
+        }
+        
+        // 更新摘要信息
+        function updateSummary() {
+            // 为摘要添加动画效果
+            Object.values(summaryElements).forEach((el, index) => {
+                el.style.opacity = '0';
+                el.style.transform = 'translateY(10px)';
+                
+                setTimeout(() => {
+                    if (index === 0) el.textContent = `${ratings.overall}星`;
+                    if (index === 1) el.textContent = `${ratings.speed}星`;
+                    if (index === 2) el.textContent = `${ratings.solution}星`;
+                    if (index === 3) el.textContent = `${ratings.attitude}星`;
+                    
+                    el.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+                    el.style.opacity = '1';
+                    el.style.transform = 'translateY(0)';
+                }, 100 * index);
+            });
+        }
+        
+        // 显示从服务器获取的评价编号
+        function displayEvaluationId() {
+            if (!serverEvaluationId) return;
+            
+            const feedbackIdElement = document.getElementById('feedback-id');
+            feedbackIdElement.textContent = '';
+            
+            // 逐个显示字符的动画
+            let i = 0;
+            const interval = setInterval(() => {
+                if (i < serverEvaluationId.length) {
+                    feedbackIdElement.textContent += serverEvaluationId[i];
+                    i++;
+                } else {
+                    clearInterval(interval);
+                }
+            }, 50);
+        }
+        
+        // 显示接口返回的提交时间
+        function displayServerSubmitTime() {
+            if (!serverSubmitTime) return;
+            
+            // 解析服务器返回的时间字符串
+            const serverTime = new Date(serverSubmitTime);
+            
+            // 格式化显示为本地时间格式
+            const formattedTime = serverTime.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
+            const submitTimeElement = document.getElementById('submit-time-display');
+            submitTimeElement.textContent = '';
+            
+            // 逐个显示字符的动画
+            let i = 0;
+            const interval = setInterval(() => {
+                if (i < formattedTime.length) {
+                    submitTimeElement.textContent += formattedTime[i];
+                    i++;
+                } else {
+                    clearInterval(interval);
+                }
+            }, 50);
+        }
+        
+        // 获取设备信息
+        function getDeviceInfo() {
+            return {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                language: navigator.language,
+                screen: {
+                    width: window.screen.width,
+                    height: window.screen.height
+                },
+                deviceMemory: navigator.deviceMemory || '未知',
+                hardwareConcurrency: navigator.hardwareConcurrency || '未知'
+            };
+        }
+        
+        // 初始化页面元素动画
+        function initPageAnimations() {
+            const fadeElements = document.querySelectorAll('.text-fade');
+            fadeElements.forEach((el, index) => {
+                el.style.opacity = '0';
+                el.style.transform = 'translateY(10px)';
+                
+                setTimeout(() => {
+                    el.style.opacity = '1';
+                    el.style.transform = 'translateY(0)';
+                }, 100 * index);
+            });
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
