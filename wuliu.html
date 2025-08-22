@@ -1,0 +1,2563 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>物流查询 - 管理系统</title>
+  <!-- 生产环境资源 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.3.9/dist/index.css">
+  <script src="https://unpkg.com/element-plus@2.3.9/dist/index.full.min.js"></script>
+  <link rel="icon" href="/img/header.png" type="image/x-icon">
+  <!-- Tailwind CSS引入 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+   // 初始化页面
+    async function initPage() {
+        const username = localStorage.getItem('username');
+        if (!username) {
+            // 未登录状态，重定向到登录页
+            window.location.href = 'https://wdbso.vip/index-login.html';
+            return;
+        }
+        // 获取并显示用户名
+        const usernameDisplay = document.getElementById('usernameDisplay');
+        if (usernameDisplay) {
+          usernameDisplay.textContent = username || '未知用户';
+        }
+        // 初始化水印（确保覆盖整个页面）
+          initWatermark(username);
+          
+          // 监听窗口大小变化，重新调整水印
+          window.addEventListener('resize', () => {
+            initWatermark(username);
+          });
+    }
+        // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', initPage);
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            success: '#00B42A',
+            warning: '#FF7D00',
+            danger: '#F53F3F',
+            'neutral-100': '#F2F3F5',
+            'neutral-200': '#E5E6EB',
+            'neutral-300': '#C9CDD4',
+            'neutral-400': '#86909C',
+            'neutral-500': '#4E5969',
+            'neutral-600': '#1D2129',
+          },
+          fontFamily: { inter: ['Inter', 'system-ui', 'sans-serif'] },
+        },
+      }
+    }
+  </script>
+  <style type="text/tailwindcss">
+    body {
+            cursor: url('/img/mouse.png'), auto;
+            position: relative; /* 确保水印能正确定位 */
+        }
+    @layer utilities {
+      .content-auto { content-visibility: auto; }
+      .card-shadow { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); }
+      .hover-lift { transition: transform 0.2s, box-shadow 0.2s; }
+      .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12); }
+      .text-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      
+      /* 用户下拉菜单样式 */
+      .user-dropdown {
+        position: absolute;
+        right: 0;
+        top: 100%;
+        margin-top: 5px;
+        width: 180px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        z-index: 100;
+        overflow: hidden;
+        transform-origin: top right;
+        transform: scale(0.95);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.2s ease;
+      }
+      .user-dropdown.active {
+        transform: scale(1);
+        opacity: 1;
+        pointer-events: all;
+      }
+       /* 水印样式 - 确保覆盖整个页面 */
+      .watermark-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;  /* 视窗宽度 */
+        height: 100vh; /* 视窗高度 */
+        pointer-events: none; /* 不影响交互 */
+        z-index: 999; /* 确保在内容上方但不遮挡UI元素 */
+        overflow: hidden;
+        opacity: 0.04; /* 更淡的透明度，不影响内容阅读 */
+        background-repeat: repeat; /* 重复平铺 */
+      }
+      .watermark-text {
+        position: absolute;
+        font-size: 28px; /* 稍大的字体 */
+        font-weight: 600;
+        color: #000000;
+        transform: rotate(-45deg);
+        white-space: nowrap; /* 防止文本换行 */
+        user-select: none; /* 禁止选择 */
+        display: block;
+      }
+    }
+  </style>
+
+  <!-- Font Awesome -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  
+  <!-- 请求拦截器 -->
+  <script>
+  // 初始化水印（确保覆盖整个页面）
+    function initWatermark(username) {
+      const container = document.getElementById('watermarkContainer');
+      if (!container || !username) return;
+      
+      // 清空现有水印
+      container.innerHTML = '';
+      
+      // 获取视窗尺寸，确保水印覆盖整个可见区域
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // 计算水印数量和间距（增加密度确保完全覆盖）
+      const step = 200; // 水印间距（像素）- 更小的间距意味着更密集的水印
+      const horizontalCount = Math.ceil(windowWidth / step) + 1; // 水平方向水印数量
+      const verticalCount = Math.ceil(windowHeight / step) + 1;   // 垂直方向水印数量
+      
+      // 创建水印网格
+      for (let i = 0; i < verticalCount; i++) {
+        for (let j = 0; j < horizontalCount; j++) {
+          const watermark = document.createElement('div');
+          watermark.className = 'watermark-text';
+          watermark.textContent = username;
+          
+          // 计算位置（覆盖整个视窗）
+          const left = j * step - step/2; // 向左偏移一半间距，确保边缘也有覆盖
+          const top = i * step - step/2;  // 向上偏移一半间距
+          
+          // 设置位置和样式
+          watermark.style.left = `${left}px`;
+          watermark.style.top = `${top}px`;
+          
+          container.appendChild(watermark);
+        }
+      }
+    }
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = function(url, options = {}) {
+          if (typeof url === 'string' && (url.includes('wdbso.vip') || url.startsWith('/'))) {
+              if (!url.includes('wdbso.vip/a') && !url.includes('wdbso.vip/b')) {
+                  if (!options.headers) {
+                      options.headers = {};
+                  }
+                  const hash = localStorage.getItem('hash');
+                  if (hash) {
+                      options.headers['token'] = hash;
+                  }
+              }
+          }
+          return originalFetch(url, options);
+      };
+      
+      const originalXHROpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+          if (typeof url === 'string' && url.includes('wdbso.vip')) {
+              this._url = url;
+          }
+          return originalXHROpen.apply(this, arguments);
+      };
+      
+      const originalXHRSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function(body) {
+          if (this._url && this._url.includes('wdbso.vip')) {
+              if (!this._url.includes('wdbso.vip/a') && !this._url.includes('wdbso.vip/b')) {
+                  const hash = localStorage.getItem('hash');
+                  if (hash) {
+                      this.setRequestHeader('token', hash);  
+                  }
+              }
+          }
+          return originalXHRSend.call(this, body);
+      };
+    })();
+  </script>
+
+  <!-- 物流查询页面专用样式 -->
+  <style>
+    #wuliu {
+        --primary-color: #165DFF;
+        --primary-dark: #0E4CD1;
+        --success-color: #2ecc71;
+        --warning-color: #f39c12;
+        --danger-color: #e74c3c;
+        --info-color: #3498db;
+        --light-color: #ecf0f1;
+        --dark-color: #2c3e50;
+        --gray-color: #95a5a6;
+    }
+    
+    #wuliu .container {
+        background-color: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+    }
+    
+    #wuliu .header {
+        background-color: var(--primary-color);
+        color: white;
+        padding: 20px 30px;
+        text-align: center;
+    }
+    
+    #wuliu .header h2 {
+        margin: 0;
+        font-size: 1.8rem;
+        font-weight: 600;
+    }
+    
+    #wuliu .form-section {
+        padding: 30px;
+    }
+    
+    #wuliu .form-group {
+        margin-bottom: 20px;
+    }
+    
+    #wuliu .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: #333;
+    }
+    
+    #wuliu .form-group input,
+    #wuliu .form-group select,
+    #wuliu .form-group textarea {
+        width: 100%;
+        padding: 12px 15px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        box-sizing: border-box;
+        font-size: 1rem;
+        transition: border-color 0.3s;
+    }
+    
+    #wuliu .form-group input:focus,
+    #wuliu .form-group select:focus,
+    #wuliu .form-group textarea:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.2);
+    }
+    
+    #wuliu #courierHint {
+        font-size: 0.9rem;
+        color: #7f8c8d;
+        margin-top: 5px;
+        padding: 8px 12px;
+        background-color: #f9f9f9;
+        border-left: 3px solid var(--gray-color);
+        border-radius: 0 4px 4px 0;
+    }
+    
+    #wuliu button[type="submit"] {
+        width: 100%;
+        padding: 12px 20px;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 500;
+        transition: background-color 0.3s;
+    }
+    
+    #wuliu button[type="submit"]:hover {
+        background-color: var(--primary-dark);
+    }
+    
+    #wuliu button[type="submit"]:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.3);
+    }
+    
+    /* 加载指示器样式 */
+    #wuliu #loadingIndicator {
+        display: none;
+        text-align: center;
+        padding: 30px 0;
+    }
+    
+    #wuliu .spinner {
+        border: 4px solid rgba(0, 0, 0, 0.1);
+        border-left-color: var(--primary-color);
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 15px;
+    }
+    
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+    
+    #wuliu #loadingIndicator p {
+        color: #555;
+        font-size: 1rem;
+    }
+    
+    /* 错误消息样式 */
+    #wuliu #errorMessage {
+        display: none;
+        color: #d32f2f;
+        background-color: #ffebee;
+        border-left: 4px solid #f44336;
+        padding: 15px 20px;
+        margin: 20px 30px;
+        border-radius: 0 4px 4px 0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* 物流结果样式 */
+    #wuliu #trackingResult {
+        display: none;
+        padding: 0 30px 30px;
+    }
+    
+    /* 状态筛选器样式 */
+    #wuliu #statusFilters {
+        padding: 20px 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    
+    #wuliu .status-filter-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    #wuliu .status-filter {
+        padding: 8px 15px;
+        border: none;
+        border-radius: 20px;
+        color: white;
+        cursor: pointer;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        transition: all 0.3s;
+    }
+    
+    #wuliu .status-filter.active {
+        transform: scale(1.05);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    #wuliu .status-filter:not(.active):hover {
+        opacity: 0.9;
+    }
+    
+    /* 状态分组样式 */
+    #wuliu .status-group {
+        margin-bottom: 20px;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+    }
+    
+    #wuliu .status-header {
+        padding: 15px 20px;
+        color: white;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    #wuliu .package-count {
+        font-size: 0.9rem;
+        font-weight: normal;
+        background-color: rgba(255, 255, 255, 0.2);
+        padding: 4px 10px;
+        border-radius: 20px;
+    }
+    
+    #wuliu .package-list {
+        padding: 15px;
+    }
+    
+    #wuliu .package-item {
+        margin-bottom: 15px;
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+        transition: transform 0.3s, box-shadow 0.3s;
+    }
+    
+    #wuliu .package-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    }
+    
+    #wuliu .package-header {
+        padding: 18px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    #wuliu .tracking-info {
+        flex: 1;
+    }
+    
+    #wuliu .tracking-number {
+        font-weight: 600;
+        font-size: 1.1rem;
+        color: #333;
+    }
+    
+    #wuliu .courier-info {
+        font-size: 0.9rem;
+        color: var(--gray-color);
+    }
+    
+    #wuliu .view-details {
+        padding: 8px 15px;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: background-color 0.3s;
+    }
+    
+    #wuliu .view-details:hover {
+        background-color: var(--primary-dark);
+    }
+    
+    /* 跟踪详情样式 */
+    #wuliu .tracking-details {
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        margin: 30px 0;
+        overflow: hidden;
+    }
+    
+    #wuliu .details-header {
+        padding: 20px 30px;
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    #wuliu .details-header h3 {
+        margin: 0;
+        font-size: 1.2rem;
+        color: #333;
+    }
+    
+    #wuliu .close-details {
+        padding: 8px 15px;
+        background-color: #e9ecef;
+        color: #6c757d;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: background-color 0.3s;
+    }
+    
+    #wuliu .close-details:hover {
+        background-color: #dee2e6;
+    }
+    
+    #wuliu .details-content {
+        padding: 20px 30px;
+    }
+    
+    #wuliu .details-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    
+    #wuliu .summary-item {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 6px;
+    }
+    
+    #wuliu .summary-label {
+        font-size: 0.9rem;
+        color: var(--gray-color);
+        margin-bottom: 5px;
+    }
+    
+    #wuliu .summary-value {
+        font-weight: 500;
+        color: #333;
+    }
+    
+    /* 物流事件时间线样式 */
+    #wuliu .tracking-events-container {
+        margin-top: 20px;
+    }
+    
+    #wuliu .tracking-events-container h4 {
+        color: #495057;
+        margin-top: 0;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    #wuliu .tracking-events {
+        position: relative;
+        padding-left: 30px;
+    }
+    
+    #wuliu .tracking-event {
+        margin-bottom: 25px;
+        position: relative;
+    }
+    
+    #wuliu .event-dot {
+        position: absolute;
+        left: -22px;
+        top: 0;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background-color: #d1d5db;
+        z-index: 1;
+    }
+    
+    #wuliu .latest-dot {
+        background-color: var(--success-color);
+    }
+    
+    #wuliu .event-line {
+        position: absolute;
+        left: -14px;
+        top: 20px;
+        bottom: -20px;
+        width: 2px;
+        background-color: #e5e7eb;
+    }
+    
+    #wuliu .latest-line {
+        background-color: var(--success-color);
+    }
+    
+    #wuliu .event-content {
+    }
+    
+    #wuliu .event-date {
+        font-size: 0.9rem;
+        color: var(--gray-color);
+        margin-bottom: 5px;
+    }
+    
+    #wuliu .event-status {
+        font-weight: 500;
+        color: #333;
+        margin: 5px 0;
+    }
+    
+    #wuliu .event-location {
+        font-size: 0.9rem;
+        color: var(--gray-color);
+    }
+    
+    /* 响应式设计 */
+    @media (max-width: 768px) {
+        #wuliu .form-section,
+        #wuliu #trackingResult {
+            padding: 20px;
+        }
+        
+        #wuliu .details-summary {
+            grid-template-columns: 1fr;
+        }
+        
+        #wuliu .package-header {
+            flex-direction: column;
+            text-align: center;
+            gap: 10px;
+        }
+        
+        #wuliu .view-details {
+            width: 100%;
+        }
+    }
+  </style>
+</head>
+
+<body class="font-inter bg-neutral-100 text-neutral-600 min-h-screen flex flex-col">
+  <div id="app" class="flex flex-col h-screen overflow-hidden">
+      <!-- 水印容器 - 放在body最顶部，确保覆盖所有内容 -->
+<div class="watermark-container" id="watermarkContainer"></div>
+    <!-- 顶部导航栏 -->
+    <header class="bg-white border-b border-neutral-200 shadow-sm z-10">
+  <div class="w-full px-4"> <!-- 移除container mx-auto限制，使用全宽 -->
+    <div class="flex items-center justify-between h-16 max-w-full"> <!-- 允许最大宽度为全屏 -->
+      <!-- 左侧Logo和标题 - 强制居左 -->
+      <div class="flex items-center space-x-2">
+        <!-- 汉堡菜单按钮 - 放在Logo左侧，确保Logo始终在更左侧 -->
+        <button id="menuToggle" class="md:hidden text-neutral-600 hover:text-primary mr-2">
+          <i class="fa fa-bars text-xl"></i>
+        </button>
+        <div class="text-primary text-2xl">
+          <i class="fa fa-truck"></i>
+        </div>
+        <h1 class="text-xl font-bold text-neutral-600 whitespace-nowrap">管理系统</h1>
+      </div>
+      
+      <!-- 右侧用户区域 - 新增下拉菜单功能 -->
+      <div class="flex items-center space-x-6 ml-auto"> <!-- ml-auto确保推到最右侧 -->
+        <!-- 通知图标 -->
+        <div class="relative cursor-pointer hover:text-primary transition-colors">
+          <i class="fa fa-bell-o text-lg"></i>
+          <span class="absolute -top-1 -right-1 bg-danger text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">3</span>
+        </div>
+        
+        <!-- 用户信息及下拉菜单 -->
+        <div class="relative" id="userContainer">
+          <div class="flex items-center space-x-3 cursor-pointer group" id="userMenu">
+            <img src="/img/1.png" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm">
+            <span class="font-medium hidden md:inline-block" id="usernameDisplay">加载中...</span>
+            <i class="fa fa-angle-down text-neutral-400 group-hover:text-primary transition-colors"></i>
+          </div>
+          
+          <!-- 用户下拉菜单 -->
+          <div class="user-dropdown" id="userDropdown">
+            <div class="py-2">
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-user-o mr-2 text-neutral-400"></i>个人中心
+              </a>
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog mr-2 text-neutral-400"></i>系统设置
+              </a>
+              <div class="border-t border-neutral-100 my-1"></div>
+              <button id="logoutBtn" class="w-full text-left px-4 py-2 text-sm text-danger hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-out mr-2"></i>退出登录
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+    
+    <!-- 主内容区 -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- 侧边导航 -->
+      <aside class="w-64 bg-white border-r border-neutral-200 flex-shrink-0 hidden md:block transition-all duration-300" id="sidebar">
+        <nav class="py-4 h-full flex flex-col">
+          <div class="px-4 mb-4">
+            <div class="relative">
+              <input type="text" placeholder="搜索功能..." class="w-full py-2 px-3 pl-10 rounded-lg bg-neutral-100 border border-transparent focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm">
+              <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400"></i>
+            </div>
+          </div>
+          
+          <ul class="flex-1 overflow-y-auto py-2">
+            <li class="mb-1">
+              <a href="https://wdbso.vip/dashboard.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-dashboard w-5 text-center mr-3"></i>
+                <span>数据仪表盘</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khwuliu.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-history w-5 text-center mr-3"></i>
+                <span>客户物流详情</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="khruku.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-in w-5 text-center mr-3"></i>
+                <span>入库管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/errorOrders.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-exclamation-circle w-5 text-center mr-3"></i>
+                <span>异常订单管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="khyue.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-money w-5 text-center mr-3"></i>
+                <span>客户余额</span>
+              </a>
+            </li>
+            <!-- 物流查询导航项 - 设置为当前激活状态 -->
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/wuliu.html" class="nav-link flex items-center px-4 py-3 text-primary bg-primary/5 border-r-4 border-primary font-medium">
+                <i class="fa fa-search w-5 text-center mr-3"></i>
+                <span>物流查询</span>
+              </a>
+            </li>
+            <!-- SKU排行榜导航项 -->
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khsku.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>SKU排行榜</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/everyday.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-calendar-check-o w-5 text-center mr-3"></i>
+                <span>每日看板</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/jianhuo.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-clock-o w-5 text-center mr-3"></i>
+                <span>拣货时效管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="kh/settings.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog w-5 text-center mr-3"></i>
+                <span>系统设置</span>
+              </a>
+            </li>
+          </ul>
+          
+          <!-- 底部帮助区域 -->
+          <div class="p-4 border-t border-neutral-200">
+            <div class="bg-primary/5 rounded-lg p-3">
+              <h4 class="font-medium text-primary text-sm mb-2">需要帮助？</h4>
+              <p class="text-neutral-500 text-xs mb-3">查看帮助文档或联系技术支持</p>
+              <a href="#" class="text-xs text-primary hover:underline">
+                <i class="fa fa-question-circle mr-1"></i> 帮助中心
+              </a>
+            </div>
+          </div>
+        </nav>
+      </aside>
+      
+      <!-- 物流查询模块内容 -->
+      <main class="flex-1 overflow-y-auto p-4 md:p-6">
+        <!-- 页面标题和操作区 -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+          <div>
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-600">物流查询中心</h2>
+            <p class="text-neutral-400 mt-1">支持多物流商批量查询，实时跟踪物流状态</p>
+          </div>
+          
+          <div class="flex items-center space-x-3 mt-4 md:mt-0">
+            <button id="refreshPage" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg transition-colors flex items-center hover-lift">
+              <i class="fa fa-refresh mr-2"></i>
+              <span>刷新页面</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 物流查询核心功能区 -->
+        <section id="wuliu">
+            <script>
+            // 确保在DOM完全加载后执行
+            document.addEventListener('DOMContentLoaded', function() {
+                // 首先获取表单元素并确保它存在
+                const trackingForm = document.getElementById('trackingForm');
+                if (!trackingForm) {
+                    console.error('未找到trackingForm表单元素');
+                    return;
+                }
+                
+                // 确保表单提交事件被正确绑定并阻止默认行为
+                // 先移除可能存在的旧事件监听器，避免重复绑定
+                const newSubmitHandler = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation(); // 阻止事件冒泡
+                    console.log('表单提交已拦截，正在处理查询...');
+                    handleFormSubmit(); // 调用专门的处理函数
+                };
+                
+                // 移除所有现有监听器并添加新的
+                trackingForm.removeEventListener('submit', newSubmitHandler);
+                trackingForm.addEventListener('submit', newSubmitHandler);
+                
+                // 为提交按钮添加点击事件处理，作为双重保险
+                const submitButton = trackingForm.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('提交按钮点击已拦截，正在处理查询...');
+                        handleFormSubmit();
+                    });
+                }
+                
+                // 获取页面元素
+                const trackingNumbersInput = document.getElementById('trackingNumbers');
+                const courierType = document.getElementById('courierType');
+                const courierHint = document.getElementById('courierHint');
+                const loadingIndicator = document.getElementById('loadingIndicator');
+                const errorMessage = document.getElementById('errorMessage');
+                const trackingResult = document.getElementById('trackingResult');
+                const trackingGroups = document.getElementById('trackingGroups');
+                const statusFilters = document.getElementById('statusFilters');
+
+                // 物流商识别规则
+                const courierPatterns = {
+                    'amazon': /^TBA/i,
+                    'gofo': /^GF/i,
+                    'uniuni': /^UU[A-Z0-9]{10,20}$/i,
+                    'fedex': /^\d{12,20}$/,
+                    'ups': /^1Z[A-HJ-NP-Z0-9]{16}$/,
+                    'usps': /^(91|92|93|94|95|96|03|04|70|23|02)\d{18,22}$/
+                };
+
+                // 当前选中的跟踪号详情
+                let currentTrackingDetails = null;
+
+                // 表单提交处理函数
+                function handleFormSubmit() {
+                    const trackingNumbersText = trackingNumbersInput.value.trim();
+                    let selectedCourier = courierType.value;
+                    const trackingNumbers = trackingNumbersText.split('\n').map(num => num.trim()).filter(num => num);
+
+                    if (trackingNumbers.length === 0) {
+                        showError('请输入有效的跟踪单号');
+                        return;
+                    }
+
+                    // 显示加载状态，隐藏之前的结果和错误
+                    showLoading(true);
+                    showError('');
+                    trackingResult.style.display = 'none';
+                    trackingGroups.innerHTML = '';
+                    statusFilters.innerHTML = '';
+
+                    try {
+                        // 存储所有查询任务的Promise
+                        const queries = trackingNumbers.map(async (trackingNumber, index) => {
+                            // 为每个单号尝试自动识别物流商（如果未选择）
+                            let courier = selectedCourier;
+                            if (!courier) {
+                                courier = autoDetectCourier(trackingNumber);
+                                if (!courier) {
+                                    return {
+                                        success: false,
+                                        trackingNumber,
+                                        courier: 'unknown',
+                                        error: '无法自动识别物流商',
+                                        status: '待重试'
+                                    };
+                                }
+                            }
+
+                            if (!courier) {
+                                return {
+                                    success: false,
+                                    trackingNumber,
+                                    courier: 'unknown',
+                                    error: '未选择物流商且无法自动识别',
+                                    status: '待重试'
+                                };
+                            }
+
+                            try {
+                                let response;
+                                // 根据物流商调用不同的API
+                                if (courier === 'fedex' || courier === 'ups') {
+                                    response = await fetch('/get_wuliu', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({ trackingNumbers: [trackingNumber] })
+                                    });
+                                } else if (courier === 'amazon') {
+                                    response = await fetch(`/get_amazon?id=${encodeURIComponent(trackingNumber)}`);
+                                } else if (courier === 'gofo') {
+                                    response = await fetch(`/get_gofo?id=${encodeURIComponent(trackingNumber)}`, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        }
+                                    });
+                                } else if (courier === 'uniuni') {
+                                    response = await fetch(`/get_uniuni?id=${encodeURIComponent(trackingNumber)}`);
+                                } else if (courier === 'usps') {
+                                    response = await fetch(`/get_usps?number=${encodeURIComponent(trackingNumber)}`);
+                                }
+
+                                if (!response.ok) {
+                                    throw new Error(`网络响应不正常: ${response.status}`);
+                                }
+
+                                const data = await response.json();
+                                return {
+                                    success: data.success,
+                                    trackingNumber,
+                                    courier,
+                                    data: data.data
+                                };
+                            } catch (error) {
+                                console.error(`查询单号 ${trackingNumber} 时出错:`, error);
+                                return {
+                                    success: false,
+                                    trackingNumber,
+                                    courier,
+                                    error: '查询物流信息时出错，请稍后再试',
+                                    status: '待重试'
+                                };
+                            }
+                        });
+
+                        // 调用异步函数处理查询结果
+                        processQueries(queries, trackingNumbers).then(() => {
+                            showLoading(false); // 所有查询完成后隐藏加载状态
+                        }).catch(error => {
+                            console.error('处理查询结果时出错:', error);
+                            showError('处理查询结果时出错，请稍后再试');
+                            showLoading(false);
+                        });
+
+                    } catch (error) {
+                        console.error('批量查询物流信息时出错:', error);
+                        showError('批量查询物流信息时出错，请稍后再试');
+                        showLoading(false);
+                    }
+                }
+
+                // 异步处理查询结果的函数（修复await错误的关键）
+                async function processQueries(queries, trackingNumbers) {
+                    const uniqueStatuses = new Set();
+                    const processedResults = [];
+                    let errorCount = 0;
+                    const totalQueries = trackingNumbers.length;
+
+                    // 逐个处理查询结果，实时更新UI
+                    for (let i = 0; i < queries.length; i++) {
+                        try {
+                            const result = await queries[i]; // 现在在async函数中，可以安全使用await
+
+                            if (result.success) {
+                                // 处理成功的查询结果
+                                const processedData = processResultData(result.courier, result.trackingNumber, result.data);
+                                if (processedData) {
+                                    processedResults.push(processedData);
+                                    uniqueStatuses.add(processedData.status);
+
+                                    // 实时更新UI
+                                    if (!trackingResult.style.display || trackingResult.style.display === 'none') {
+                                        trackingResult.style.display = 'block';
+                                    }
+
+                                    // 查找或创建对应的状态组
+                                    let statusGroup = document.querySelector(`.status-group[data-status="${processedData.status}"]`);
+                                    if (!statusGroup) {
+                                        // 创建新的状态组
+                                        statusGroup = document.createElement('div');
+                                        statusGroup.className = 'status-group';
+                                        statusGroup.dataset.status = processedData.status;
+
+                                        // 根据状态设置不同的颜色
+                                        const statusColor = getStatusColor(processedData.status);
+
+                                        statusGroup.innerHTML = `
+                                            <div class="status-header" style="background-color: ${statusColor}">
+                                                <h3>${processedData.status}</h3>
+                                                <span class="package-count">1 个包裹</span>
+                                            </div>
+                                            <div class="package-list"></div>
+                                        `;
+
+                                        trackingGroups.appendChild(statusGroup);
+                                    } else {
+                                        // 更新包裹计数
+                                        const countEl = statusGroup.querySelector('.package-count');
+                                        const currentCount = parseInt(countEl.textContent);
+                                        countEl.textContent = `${currentCount + 1} 个包裹`;
+                                    }
+
+                                    // 添加包裹项到对应的状态组
+                                    const packageList = statusGroup.querySelector('.package-list');
+                                    addPackageItem(packageList, processedData);
+                                }
+                            } else {
+                                // 处理失败的查询，强制生成显示数据
+                                const failedData = {
+                                    trackingNumber: result.trackingNumber,
+                                    courier: result.courier,
+                                    status: result.status || '查询异常',
+                                    estimatedDeliveryDate: '未提供',
+                                    serviceType: '未知服务类型',
+                                    originLocation: '未知',
+                                    destinationLocation: '未知',
+                                    lastUpdated: '未提供',
+                                    events: []
+                                };
+
+                                processedResults.push(failedData);
+                                uniqueStatuses.add(failedData.status);
+
+                                // 确保UI显示
+                                if (!trackingResult.style.display || trackingResult.style.display === 'none') {
+                                    trackingResult.style.display = 'block';
+                                }
+
+                                // 查找或创建对应的状态组
+                                let statusGroup = document.querySelector(`.status-group[data-status="${failedData.status}"]`);
+                                if (!statusGroup) {
+                                    // 创建新的状态组
+                                    statusGroup = document.createElement('div');
+                                    statusGroup.className = 'status-group';
+                                    statusGroup.dataset.status = failedData.status;
+
+                                    // 根据状态设置不同的颜色
+                                    const statusColor = getStatusColor(failedData.status);
+
+                                    statusGroup.innerHTML = `
+                                        <div class="status-header" style="background-color: ${statusColor}">
+                                            <h3>${failedData.status}</h3>
+                                            <span class="package-count">1 个包裹</span>
+                                        </div>
+                                        <div class="package-list"></div>
+                                    `;
+
+                                    trackingGroups.appendChild(statusGroup);
+                                } else {
+                                    // 更新包裹计数
+                                    const countEl = statusGroup.querySelector('.package-count');
+                                    const currentCount = parseInt(countEl.textContent);
+                                    countEl.textContent = `${currentCount + 1} 个包裹`;
+                                }
+
+                                // 添加包裹项到对应的状态组
+                                const packageList = statusGroup.querySelector('.package-list');
+                                addPackageItem(packageList, failedData);
+                            }
+
+                            // 更新加载状态文本
+                            updateLoadingStatus(i + 1, totalQueries);
+
+                        } catch (error) {
+                            console.error(`处理查询结果时出错:`, error);
+                            // 即使处理出错，仍显示单号
+                            const errorData = {
+                                trackingNumber: trackingNumbers[i],
+                                courier: 'unknown',
+                                status: '处理异常',
+                                estimatedDeliveryDate: '未提供',
+                                serviceType: '未知服务类型',
+                                originLocation: '未知',
+                                destinationLocation: '未知',
+                                lastUpdated: '未提供',
+                                events: []
+                            };
+
+                            processedResults.push(errorData);
+                            uniqueStatuses.add(errorData.status);
+
+                            // 确保UI显示
+                            if (!trackingResult.style.display || trackingResult.style.display === 'none') {
+                                trackingResult.style.display = 'block';
+                            }
+
+                            // 查找或创建对应的状态组
+                            let statusGroup = document.querySelector(`.status-group[data-status="${errorData.status}"]`);
+                            if (!statusGroup) {
+                                statusGroup = document.createElement('div');
+                                statusGroup.className = 'status-group';
+                                statusGroup.dataset.status = errorData.status;
+                                const statusColor = getStatusColor(errorData.status);
+                                statusGroup.innerHTML = `
+                                    <div class="status-header" style="background-color: ${statusColor}">
+                                        <h3>${errorData.status}</h3>
+                                        <span class="package-count">1 个包裹</span>
+                                    </div>
+                                    <div class="package-list"></div>
+                                `;
+                                trackingGroups.appendChild(statusGroup);
+                            } else {
+                                const countEl = statusGroup.querySelector('.package-count');
+                                const currentCount = parseInt(countEl.textContent);
+                                countEl.textContent = `${currentCount + 1} 个包裹`;
+                            }
+
+                            // 添加包裹项
+                            const packageList = statusGroup.querySelector('.package-list');
+                            addPackageItem(packageList, errorData);
+                        }
+                    }
+
+                    // 添加状态筛选器
+                    addStatusFilters(uniqueStatuses);
+
+                    // 显示错误信息
+                    if (errorCount > 0) {
+                        let errorMsg = `以下 ${errorCount} 个单号查询失败:<br>`;
+                        const failedResults = trackingNumbers
+                            .filter((num, idx) => !processedResults.some(r => r.trackingNumber === num))
+                            .map(num => `- ${num}: 查询失败`);
+
+                        showError(errorMsg + failedResults.join('<br>'));
+                    }
+                }
+
+                // 根据单号自动识别物流商
+                function autoDetectCourier(trackingNumber) {
+                    if (!trackingNumber) return '';
+
+                    for (const [courier, pattern] of Object.entries(courierPatterns)) {
+                        if (pattern.test(trackingNumber)) {
+                            return courier;
+                        }
+                    }
+
+                    return '';
+                }
+
+                // 根据选择的物流商更新提示文本
+                courierType.addEventListener('change', function() {
+                    updateCourierHint(this.value);
+                });
+
+                // 更新物流商提示文本
+                function updateCourierHint(courier) {
+                    if (courier === 'fedex') {
+                        courierHint.textContent = '例如: 61290374823521026095 (FedEx)';
+                    } else if (courier === 'amazon') {
+                        courierHint.textContent = '例如: TBA322147753137 (Amazon)';
+                    } else if (courier === 'gofo') {
+                        courierHint.textContent = '例如: GF6136598044528 (Gofo)';
+                    } else if (courier === 'uniuni') {
+                        courierHint.textContent = '例如: UUS56G1784371695294 (Uniuni)';
+                    } else if (courier === 'usps') {
+                        courierHint.textContent = '例如: 9200190375369901440477 (USPS)';
+                    } else if (courier === 'ups') {
+                        courierHint.textContent = '例如: 1ZH912Y00329305473 (UPS)';
+                    } else {
+                        courierHint.textContent = '请选择物流商后输入对应的跟踪单号';
+                    }
+                }
+
+                // 更新加载状态文本
+                function updateLoadingStatus(completed, total) {
+                    const loadingText = document.querySelector('#loadingIndicator p');
+                    if (loadingText) {
+                        loadingText.textContent = `正在查询物流信息 (${completed}/${total})...`;
+                    }
+                }
+
+                // 处理查询结果数据
+                function processResultData(courier, trackingNumber, apiData) {
+                    // 处理查询失败或数据不完整的情况
+                    if (!apiData || (apiData.success === false)) {
+                        return {
+                            trackingNumber: trackingNumber,
+                            courier: courier,
+                            status: '查询异常',
+                            estimatedDeliveryDate: '未提供',
+                            serviceType: '未知服务类型',
+                            originLocation: '未知',
+                            destinationLocation: '未知',
+                            lastUpdated: '未提供',
+                            events: []
+                        };
+                    }
+
+                    let resultData;
+
+                    // 根据不同物流商的数据结构进行处理
+                    if (courier === 'fedex' || courier === 'ups') {
+                        resultData = processUpsFedexData(apiData);
+                    } else if (courier === 'amazon') {
+                        resultData = processAmazonData(apiData);
+                    } else if (courier === 'gofo') {
+                        resultData = processGofoData(apiData);
+                    } else if (courier === 'uniuni') {
+                        resultData = processUniuniData(apiData);
+                    } else if (courier === 'usps') {
+                        resultData = processUspsData(apiData);
+                    }
+
+                    if (!resultData) {
+                        // 如果处理函数返回null，创建默认数据
+                        return {
+                            trackingNumber: trackingNumber,
+                            courier: courier,
+                            status: '数据不完整',
+                            estimatedDeliveryDate: '未提供',
+                            serviceType: '未知服务类型',
+                            originLocation: '未知',
+                            destinationLocation: '未知',
+                            lastUpdated: '未提供',
+                            events: []
+                        };
+                    }
+
+                    resultData.trackingNumber = trackingNumber;
+                    resultData.courier = courier;
+                    return resultData;
+                }
+                
+                // 格式化Gofo状态
+                function formatGofoStatus(statusCode) {
+                    if (!statusCode) return '未知状态';
+
+                    const statusMap = {
+                        '100': '已创建',
+                        '200': '离开配送中心',
+                        '201': '到达当地设施',
+                        '202': '到达配送中心',
+                        '205': '已送达',
+                        '208': '派送中',
+                        '203': '离开当地设施',
+                        '412': '到达处理中心',
+                        'Delivered': '已送达',
+                        'Out for delivery': '派送中',
+                        'Transit':'运输中',
+                        'Processing':'已创建',
+                        'Alert':'妥投失败',
+                        '':'运输中'
+                    };
+
+                    return statusMap[statusCode] || statusCode;
+                }
+                
+                // 格式化Gofo事件
+                function formatGofoEvents(events) {
+                    if (!events || events.length === 0) return [];
+
+                    return events.map(event => {
+                        // 处理时间格式
+                        const dateTime = new Date(event.processDate);
+                        const date = `${dateTime.getFullYear()}-${String(dateTime.getMonth() + 1).padStart(2, '0')}-${String(dateTime.getDate()).padStart(2, '0')}`;
+                        const time = `${String(dateTime.getHours()).padStart(2, '0')}:${String(dateTime.getMinutes()).padStart(2, '0')}:${String(dateTime.getSeconds()).padStart(2, '0')}`;
+                        
+                        // 处理时区
+                        const offset = dateTime.getTimezoneOffset();
+                        const hours = Math.abs(Math.floor(offset / 60));
+                        const minutes = Math.abs(offset % 60);
+                        const gmtOffset = `${offset > 0 ? '-' : '+'}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+
+                        // 处理地点信息
+                        let location = event.processLocation || '未知地点';
+                        // 补充国家信息（Gofo主要服务美国）
+                        if (location && !location.includes('美国')) {
+                            location += ', 美国';
+                        }
+
+                        return {
+                            date: date,
+                            time: time,
+                            gmtOffset: gmtOffset,
+                            status: formatGofoStatus(event.processCode) || event.processContent || '未知事件',
+                            location: location,
+                            timestamp: dateTime.getTime()
+                        };
+                    }).sort((a, b) => b.timestamp - a.timestamp); // 按时间倒序排列（最新的在前）
+                }
+                
+                // 处理Gofo数据
+                function processGofoData(apiData) {
+                    let resultData = {
+                        status: '未知状态',
+                        estimatedDeliveryDate: '未提供',
+                        serviceType: 'GOFO EXPRESS',
+                        originLocation: '未知',
+                        destinationLocation: '未知',
+                        lastUpdated: '未提供',
+                        events: []
+                    };
+
+                    if (apiData && apiData.data && apiData.data.length > 0) {
+                        const packageInfo = apiData.data[0];
+                        
+                        // 提取基本状态信息
+                        resultData.status = formatGofoStatus(packageInfo.status || packageInfo.lastTrackEvent?.processCode) || '未知状态';
+                        resultData.serviceType = packageInfo.serviceName || 'GOFO EXPRESS';
+                        
+                        // 处理物流事件
+                        resultData.events = formatGofoEvents(packageInfo.trackEventList || []);
+                        
+                        // 提取发件地和目的地
+                        if (resultData.events.length > 0) {
+                            // 第一个事件作为发货地
+                            resultData.originLocation = resultData.events[resultData.events.length - 1].location;
+                            
+                            // 目的地逻辑调整：只有在已签收状态下才显示实际目的地，否则显示"运输中"
+                            const isDelivered = packageInfo.status === 'SIGNED' || 
+                                               (packageInfo.lastTrackEvent?.processCode === '8888' || 
+                                                packageInfo.lastTrackEvent?.processCode === '9999');
+                            resultData.destinationLocation = isDelivered ? 
+                                resultData.events[0].location : '运输中';
+                        }
+                        
+                        // 提取最后更新时间
+                        if (packageInfo.lastTrackEvent?.processDate) {
+                            resultData.lastUpdated = formatDateTime(packageInfo.lastTrackEvent.processDate);
+                        } else if (resultData.events.length > 0) {
+                            const latestEvent = resultData.events[0];
+                            resultData.lastUpdated = `${latestEvent.date} ${latestEvent.time}`;
+                        }
+                        
+                        // 计算预计送达时间（如果有）
+                        if (packageInfo.createTime && packageInfo.intervalDays) {
+                            const createDate = new Date(packageInfo.createTime);
+                            const estimatedDate = new Date(createDate.getTime() + parseFloat(packageInfo.intervalDays) * 24 * 60 * 60 * 1000);
+                            resultData.estimatedDeliveryDate = formatDate(estimatedDate);
+                        }
+                    }
+
+                    return resultData;
+                }    
+                
+                // 处理UPS和FedEx数据
+                function processUpsFedexData(apiData) {
+                    let resultData = {
+                        status: '未知状态',
+                        estimatedDeliveryDate: '未提供',
+                        serviceType: '未知服务类型',
+                        originLocation: '未知',
+                        destinationLocation: '未知',
+                        lastUpdated: '未提供',
+                        events: []
+                    };
+
+                    if (apiData && apiData.data && apiData.data.length > 0) {
+                        const trackingInfo = apiData.data[0];
+                        
+                        // 优化状态提取逻辑，支持多种格式
+                        let status = '未知状态';
+                        if (trackingInfo.nowStr) {
+                            // 尝试匹配中文状态 (已递送 ）
+                            const chineseStatusMatch = trackingInfo.nowStr.match(/（([^）]+)）/);
+                            if (chineseStatusMatch) {
+                                status = chineseStatusMatch[1].trim();
+                            } 
+                            // 尝试匹配英文状态 (In Transit)
+                            else if (trackingInfo.nowStr.includes('(') && trackingInfo.nowStr.includes(')')) {
+                                status = trackingInfo.nowStr.match(/\(([^)]+)\)/)[1].trim();
+                            } 
+                            // 尝试从statusMessage提取
+                            else if (trackingInfo.trackDetailDTOS.length > 0 && trackingInfo.trackDetailDTOS[0].statusMessage) {
+                                status = trackingInfo.trackDetailDTOS[0].statusMessage.trim();
+                            }
+                        }
+                        resultData.status = formatUpsStatus(status);
+                        
+                        resultData.trackingNumber = trackingInfo.trackingNumber;
+                        resultData.serviceType = trackingInfo.serviceType || 'UPS 服务';
+                        
+                        // 处理物流事件
+                        resultData.events = trackingInfo.trackDetailDTOS.map(event => {
+                            // 解析地址
+                            const address = formatUpsFedexAddress(event.address);
+                            
+                            // 优化时间解析
+                            let eventTime = event.startTime;
+                            if (eventTime && eventTime.includes('+')) {
+                                eventTime = eventTime.split('+')[0];
+                            }
+                            const [date, time] = eventTime.split(' ').slice(0, 2);
+                            
+                            return {
+                                date: date || '未提供',
+                                time: time || '未提供',
+                                status: event.statusMessage || '未知事件',
+                                location: address || '未知地点'
+                            };
+                        });
+                        
+                        // 提取发件地和目的地
+                        if (resultData.events.length > 0) {
+                            resultData.originLocation = formatUpsFedexAddress(trackingInfo.trackDetailDTOS[0].address) || '未知';
+                            const lastEvent = trackingInfo.trackDetailDTOS[trackingInfo.trackDetailDTOS.length - 1];
+                            resultData.destinationLocation = formatUpsFedexAddress(lastEvent.address) || '未知';
+                        }
+                        
+                        // 提取最后更新时间
+                        if (resultData.events.length > 0) {
+                            const latestEvent = resultData.events[0];
+                            resultData.lastUpdated = `${latestEvent.date} ${latestEvent.time}`;
+                        } else if (trackingInfo.nowStr) {
+                            resultData.lastUpdated = trackingInfo.nowStr.split(' ')[0];
+                        }
+                    }
+
+                    return resultData;
+                }
+
+                // 格式化UPS/FedEx地址 (US.MS.Como -> 美国, 密西西比州, Como)
+                function formatUpsFedexAddress(addressStr) {
+                    if (!addressStr) return '未知';
+                    
+                    // 处理特殊无效值
+                    if (addressStr === 'nullnull' || addressStr === 'nullUS' || addressStr === 'null') {
+                        return '未知';
+                    }
+                    
+                    // 分割地址部分 (US.MS.Como -> ["US", "MS", "Como"])
+                    const parts = addressStr.split('.').filter(part => part);
+                    
+                    if (parts.length === 0) return addressStr;
+                    
+                    // 国家代码映射（扩展更多国家）
+                    const countryMap = {
+                        'US': '美国', 'CA': '加拿大', 'UK': '英国', 'DE': '德国', 'FR': '法国', 
+                        'IT': '意大利', 'ES': '西班牙', 'JP': '日本', 'CN': '中国', 'AU': '澳大利亚',
+                        'RU': '俄罗斯', 'IN': '印度', 'BR': '巴西', 'MX': '墨西哥', 'SG': '新加坡',
+                        'MY': '马来西亚', 'TH': '泰国', 'VN': '越南', 'KR': '韩国', 'NL': '荷兰'
+                    };
+                    
+                    // 美国州代码映射（完整列表）
+                    const usStateMap = {
+                        'AL': '阿拉巴马州', 'AK': '阿拉斯加州', 'AZ': '亚利桑那州', 'AR': '阿肯色州', 
+                        'CA': '加利福尼亚州', 'CO': '科罗拉多州', 'CT': '康涅狄格州', 'DE': '特拉华州', 
+                        'FL': '佛罗里达州', 'GA': '佐治亚州', 'HI': '夏威夷州', 'ID': '爱达荷州', 
+                        'IL': '伊利诺伊州', 'IN': '印第安纳州', 'IA': '艾奥瓦州', 'KS': '堪萨斯州', 
+                        'KY': '肯塔基州', 'LA': '路易斯安那州', 'ME': '缅因州', 'MD': '马里兰州', 
+                        'MA': '马萨诸塞州', 'MI': '密歇根州', 'MN': '明尼苏达州', 'MS': '密西西比州', 
+                        'MO': '密苏里州', 'MT': '蒙大拿州', 'NE': '内布拉斯加州', 'NV': '内华达州', 
+                        'NH': '新罕布什尔州', 'NJ': '新泽西州', 'NM': '新墨西哥州', 'NY': '纽约州', 
+                        'NC': '北卡罗来纳州', 'ND': '北达科他州', 'OH': '俄亥俄州', 'OK': '俄克拉何马州', 
+                        'OR': '俄勒冈州', 'PA': '宾夕法尼亚州', 'RI': '罗得岛州', 'SC': '南卡罗来纳州', 
+                        'SD': '南达科他州', 'TN': '田纳西州', 'TX': '得克萨斯州', 'UT': '犹他州', 
+                        'VT': '佛蒙特州', 'VA': '弗吉尼亚州', 'WA': '华盛顿州', 'WV': '西弗吉尼亚州', 
+                        'WI': '威斯康星州', 'WY': '怀俄明州'
+                    };
+                    
+                    let formattedParts = [];
+                    
+                    // 处理国家（支持更多格式，如"US"或"美国"）
+                    let countryCode = parts[0];
+                    if (countryMap[countryCode]) {
+                        formattedParts.push(countryMap[countryCode]);
+                    } else if (Object.values(countryMap).includes(countryCode)) {
+                        formattedParts.push(countryCode);
+                    } else {
+                        formattedParts.push(countryCode);
+                    }
+                    
+                    // 处理州/省（优先匹配美国州，再处理其他国家的省/地区）
+                    if (parts.length > 1) {
+                        const stateCode = parts[1];
+                        if (countryCode === 'US' && usStateMap[stateCode]) {
+                            formattedParts.push(usStateMap[stateCode]);
+                        } else {
+                            // 非美国地址直接添加州/省代码
+                            formattedParts.push(stateCode);
+                        }
+                    }
+                    
+                    // 处理城市/地区
+                    if (parts.length > 2) {
+                        formattedParts.push(parts[2]);
+                    }
+                    
+                    // 处理额外的地址部分（如街道信息）
+                    if (parts.length > 3) {
+                        formattedParts.push(parts.slice(3).join('.'));
+                    }
+                    
+                    return formattedParts.join(', ');
+                }
+                
+                // 处理Amazon数据
+                function processAmazonData(apiData) {
+                    let resultData = {
+                        status: '未知状态',
+                        estimatedDeliveryDate: '未提供',
+                        serviceType: 'Amazon Logistics',
+                        originLocation: '未知',
+                        destinationLocation: '未知',
+                        lastUpdated: '未提供',
+                        events: []
+                    };
+
+                    // 强制解析JSON字符串（关键步骤）
+                    let progressTracker = {};
+                    let eventHistory = { eventHistory: [] };
+                    try {
+                        progressTracker = JSON.parse(apiData.progressTracker || '{}');
+                        eventHistory = JSON.parse(apiData.eventHistory || '{"eventHistory":[]}');
+                    } catch (e) {
+                        console.error('解析Amazon数据失败:', e);
+                        return resultData;
+                    }
+
+                    // 提取状态和时间
+                    if (progressTracker.summary) {
+                        resultData.status = formatAmazonStatus(progressTracker.summary.status);
+                        resultData.estimatedDeliveryDate = formatDateTime(progressTracker.summary.metadata?.expectedDeliveryDate?.date);
+                    }
+
+                    // 提取事件并处理空数据
+                    resultData.events = formatAmazonEvents(eventHistory.eventHistory);
+                    
+                    // 补充发货地和目的地（从第一个和最后一个非空地址提取）
+                    const validEvents = resultData.events.filter(e => e.location !== '未知地点');
+                    if (validEvents.length > 0) {
+                        resultData.originLocation = validEvents[0].location;
+                        resultData.destinationLocation = validEvents[validEvents.length - 1].location;
+                    }
+
+                    // 提取最后更新时间
+                    if (resultData.events.length > 0) {
+                        resultData.lastUpdated = `${resultData.events[0].date} ${resultData.events[0].time}`;
+                    }
+
+                    return resultData;
+                }
+
+                // 处理Uniuni数据（优化版）
+                function processUniuniData(apiData) {
+                    let resultData = {
+                        status: '未知状态',
+                        estimatedDeliveryDate: '未提供',
+                        serviceType: 'Uniuni Express',
+                        originLocation: 'UNIUNI收到订单', // 固定发货地显示
+                        destinationLocation: '未知',
+                        lastUpdated: '未提供',
+                        events: []
+                    };
+
+                    if (apiData && apiData.data && apiData.data.valid_tno && apiData.data.valid_tno.length > 0) {
+                        const packageInfo = apiData.data.valid_tno[0];
+                        resultData.status = formatUniuniStatus(packageInfo.state) || '未知状态';
+                        resultData.estimatedDeliveryDate = packageInfo.estimate_time ? formatDate(packageInfo.estimate_time) : '未提供';
+                        resultData.serviceType = 'Uniuni Express';
+                        
+                        // 处理事件并传递国家信息
+                        resultData.events = formatUniuniEvents(packageInfo.spath_list || []);
+
+                        // 目的地：仅当状态为"已送达"时显示实际地址，其他情况显示"运输中"
+                        if (resultData.status === '已送达') {
+                            if (packageInfo.destination) {
+                                resultData.destinationLocation = formatUniuniAddress(packageInfo.destination);
+                            } else {
+                                resultData.destinationLocation = resultData.events[resultData.events.length - 1].location;
+                            }
+                        } else {
+                            resultData.destinationLocation = '运输中';
+                        }
+                        
+                        // 修复：最后更新时间提取
+                        if (resultData.events.length > 0) {
+                            const lastEvent = resultData.events[resultData.events.length - 1];
+                            resultData.lastUpdated = `${lastEvent.date} ${lastEvent.time}`;
+                        }
+                    }
+
+                    return resultData;
+                }
+
+                // 修正后的处理USPS数据函数
+                function processUspsData(apiData) {
+                    let resultData = {
+                        status: '未知状态',
+                        estimatedDeliveryDate: '未提供',
+                        serviceType: 'USPS 服务',
+                        originLocation: '未知',
+                        destinationLocation: '未知',
+                        lastUpdated: '未提供',
+                        events: []
+                    };
+
+                    const trackData = apiData.data; // 核心数据
+                    if (!trackData) return resultData;
+
+                    // 1. 状态映射
+                    const rawStatus = trackData.status || '';
+                    resultData.status = formatUpsStatus(rawStatus) || rawStatus;
+
+                    // 2. 处理物流事件
+                    resultData.events = formatUspsEvents(trackData.info || []);
+
+                    // 3. 从事件中提取发货地（最早事件）和目的地（最新事件）
+                    if (resultData.events.length > 0) {
+                        // 发货地：取最早的非空地点
+                        const earliestEvent = resultData.events[resultData.events.length - 1];
+                        resultData.originLocation = earliestEvent.location !== '未知地点' ? earliestEvent.location : '未知';
+                        
+                        // 目的地：取最新的非空地点
+                        const latestEvent = resultData.events[0];
+                        resultData.destinationLocation = latestEvent.location !== '未知地点' ? latestEvent.location : '未知';
+                    }
+
+                    // 4. 其他信息
+                    resultData.lastUpdated = trackData.update_at ? formatDateTime(trackData.update_at) : '未提供';
+                    resultData.serviceType = trackData.name || 'USPS 标准服务';
+
+                    // 5. 预计送达时间
+                    resultData.estimatedDeliveryDate = resultData.status === '已送达' ? '已送达' : 
+                        (resultData.events.find(e => e.status.includes('预计送达'))?.date || '未提供');
+
+                    return resultData;
+                }
+
+                // 格式化通用事件
+                function formatEvents(events) {
+                    if (!events || events.length === 0) return [];
+
+                    return events.map(event => ({
+                        date: formatDate(event.date || event.eventDate || event.processDate),
+                        time: formatTime(event.time || event.eventTime || event.processDate),
+                        gmtOffset: event.gmtOffset || event.timeZone || '+00:00',
+                        status: event.statusDescription || event.status || event.eventDescription || '未知事件',
+                        scanLocation: event.location || event.scanLocation || event.eventLocation || '未知地点'
+                    }));
+                }
+
+                // 格式化Amazon事件（去重并保留带地址的记录）
+                function formatAmazonEvents(events) {
+                    if (!events || events.length === 0) return [];
+
+                    // 用于临时存储去重后的事件（键：事件标识+时间戳，值：事件对象）
+                    const uniqueEvents = new Map();
+
+                    events.forEach(event => {
+                        // 1. 生成事件唯一标识（基于事件类型和时间戳，精确到分钟，避免过度去重）
+                        const eventKey = `${event.eventCode}-${new Date(event.eventTime).getTime() / 60000 | 0}`;
+                        
+                        // 2. 判断当前事件是否包含地址信息
+                        const hasLocation = !!event.location?.city;
+
+                        // 3. 去重逻辑：
+                        // - 如果是新事件（无重复），直接添加
+                        // - 如果是重复事件，保留包含地址的版本
+                        if (!uniqueEvents.has(eventKey)) {
+                            // 新事件，直接存入
+                            uniqueEvents.set(eventKey, event);
+                        } else {
+                            // 重复事件，比较地址信息：保留有地址的版本
+                            const existingEvent = uniqueEvents.get(eventKey);
+                            const existingHasLocation = !!existingEvent.location?.city;
+                            
+                            if (hasLocation && !existingHasLocation) {
+                                // 替换为包含地址的事件
+                                uniqueEvents.set(eventKey, event);
+                            }
+                        }
+                    });
+
+                    // 4. 处理去重后的事件，格式化显示信息
+                    return Array.from(uniqueEvents.values()).map(event => {
+                        const locationParts = [];
+                        if (event.location?.city) locationParts.push(event.location.city);
+                        if (event.location?.stateProvince) locationParts.push(event.location.stateProvince);
+                        if (event.location?.countryCode) locationParts.push(formatCountryCode(event.location.countryCode));
+                        
+                        // 优化空地址的显示文本
+                        let location;
+                        if (locationParts.length > 0) {
+                            location = locationParts.join(', ');
+                        } else {
+                            if (event.eventCode === 'CreationConfirmed') {
+                                location = '订单创建（无具体位置）';
+                            } else if (event.eventCode === 'Delivered') {
+                                location = '送达地址（隐私保护）';
+                            } else {
+                                location = '合作商运送中';
+                            }
+                        }
+
+                        // 格式化时间为：年-月-日 时:分:秒
+                        const dateTime = new Date(event.eventTime);
+                        const date = `${dateTime.getFullYear()}-${String(dateTime.getMonth() + 1).padStart(2, '0')}-${String(dateTime.getDate()).padStart(2, '0')}`;
+                        const time = `${String(dateTime.getHours()).padStart(2, '0')}:${String(dateTime.getMinutes()).padStart(2, '0')}:${String(dateTime.getSeconds()).padStart(2, '0')}`;
+
+                        return {
+                            date: date,
+                            time: time,
+                            gmtOffset: '+00:00',
+                            status: formatAmazonStatus(event.statusSummary?.localisedStringId || event.eventCode),
+                            location: location,
+                            // 保留时间戳用于排序
+                            timestamp: dateTime.getTime()
+                        };
+                    }).sort((a, b) => a.timestamp - b.timestamp); // 按时间正序排列（ oldest first）
+                }
+
+                // 格式化Uniuni事件
+                // 格式化Uniuni事件
+                function formatUniuniEvents(events) {
+                    if (!events || events.length === 0) return [];
+
+                    return events.map(event => {
+                        // 1. 完善时间处理，兼容localTime和pathTime
+                        let date = '';
+                        let time = '';
+                        let timestamp = 0;
+                        
+                        if (event.dateTime && event.dateTime.localTime) {
+                            // 处理localTime（格式：2025-06-17 12:19:30）
+                            const [datePart, timePart] = event.dateTime.localTime.split(' ');
+                            date = datePart;
+                            time = timePart;
+                            timestamp = new Date(event.dateTime.localTime).getTime();
+                        } else if (event.pathTime) {
+                            // 处理时间戳（转换为YYYY-MM-DD HH:MM:SS格式）
+                            const dateObj = new Date(event.pathTime * 1000);
+                            date = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+                            time = `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}:${String(dateObj.getSeconds()).padStart(2, '0')}`;
+                            timestamp = event.pathTime * 1000;
+                        }
+
+                        // 2. 完善时区处理
+                        let gmtOffset = '+00:00';
+                        if (event.dateTime && event.dateTime.offsetByGMT) {
+                            // 转换偏移秒数为±HH:MM格式
+                            const hours = Math.floor(event.dateTime.offsetByGMT / 3600);
+                            const minutes = Math.abs(Math.floor((event.dateTime.offsetByGMT % 3600) / 60));
+                            gmtOffset = `${hours >= 0 ? '+' : ''}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                        }
+
+                        // 3. 优化地址显示，补充国家信息
+                        let location = event.pathAddress || event.pathAddr || '未知地点';
+                        // 移除重复的州信息（如"CO, CO"）
+                        location = location.replace(/, ([A-Z]{2}), \1/, ', $1');
+                        // 补充国家信息（从接口返回的country字段获取）
+                        if (location && !location.includes('美国') && event.country === 'US') {
+                            location += ', 美国';
+                        }
+
+                        // 4. 状态中文本地化
+                        const statusMap = {
+                            'Order received': '订单已接收',
+                            'Gateway transit in': '到达转运中心',
+                            'Gateway transit out': '离开转运中心',
+                            'Arrival scan': '到达扫描',
+                            'Out for delivery': '派送中',
+                            'Delivered': '已送达'
+                        };
+                        const status = statusMap[event.description_en || event.code] || event.description_en || event.code || '未知事件';
+
+                        return {
+                            date: date || '未提供',
+                            time: time || '未提供',
+                            gmtOffset: gmtOffset,
+                            status: status,
+                            location: location,
+                            timestamp: timestamp
+                        };
+                    }).sort((a, b) => b.timestamp - a.timestamp); // 按时间顺序排列
+                }
+
+                // 格式化USPS事件
+                function formatUspsEvents(events) {
+                    if (!events || events.length === 0) return [];
+
+                    return events.map(event => {
+                        // 调用上述函数生成结构化地点+状态
+                        const structuredInfo = formatUspsEvent(event.event, event.status);
+                        // 拆分日期和时间
+                        const [date, time] = event.date.split(' ');
+                        
+                        return {
+                            date: date || '未提供',
+                            time: time || '未提供',
+                            gmtOffset: '+00:00',
+                            status: structuredInfo, // 直接使用结构化结果作为状态描述
+                            location: structuredInfo.split(', ').slice(0, 2).join(', '), // 地点部分（前两段）
+                            timestamp: new Date(event.date).getTime()
+                        };
+                    }).sort((a, b) => b.timestamp - a.timestamp);
+                }
+                
+                // 提取USPS事件的结构化信息（地点+状态）
+                function formatUspsEvent(eventStr, status) {
+                    // 1. 提取地点（优先匹配「城市, 州」格式，再匹配设施名称）
+                    let location = '';
+                    
+                    // 正则1：匹配「城市, 州 邮编」格式（如ATLANTA, GA 30306）
+                    const cityStateMatch = eventStr.match(/([A-Za-z\s]+),\s*([A-Z]{2})\s+\d{5}/i);
+                    if (cityStateMatch) {
+                        location = `${cityStateMatch[1].trim()}, ${cityStateMatch[2]}`; // 保留城市+州，去除邮编
+                    } 
+                    // 正则2：匹配「设施名称」格式（如ATLANTA GA DISTRIBUTION CENTER）
+                    else if (eventStr.match(/[A-Za-z\s]+DISTRIBUTION CENTER/i)) {
+                        location = eventStr.match(/[A-Za-z\s]+DISTRIBUTION CENTER/i)[0].trim();
+                    }
+                    // 正则3：匹配「城市, 州」但无邮编（如FAIRBURN, GA）
+                    else if (eventStr.match(/([A-Za-z\s]+),\s*([A-Z]{2})/i)) {
+                        const match = eventStr.match(/([A-Za-z\s]+),\s*([A-Z]{2})/i);
+                        location = `${match[1].trim()}, ${match[2]}`;
+                    }
+
+                    // 2. 处理无明确地点的情况
+                    const hasLocation = location && location.trim() !== '';
+                    if (!hasLocation) {
+                        location = 'US'; // 无具体地点时显示国家
+                    }
+
+                    // 3. 提取具体状态（结合event和status字段）
+                    let eventStatus = status;
+                    // 从event中提取更具体的状态关键词
+                    const statusKeywords = [
+                        'Delivered', 'Out for Delivery', 'Arrived at Post Office', 
+                        'Arrived at USPS Facility', 'Departed USPS Facility',
+                        'Arrived at USPS Regional Facility', 'Departed USPS Regional Facility',
+                        'Arrived at USPS Regional Destination Facility',
+                        'In Transit to Next Facility', 'Unable to Deliver', 'Business Closed', 'Will Redeliver'
+                    ];
+
+                    // 按优先级匹配关键词
+                    let matched = false;
+                    for (const keyword of statusKeywords) {
+                        if (eventStr.includes(keyword)) {
+                            eventStatus = keyword;
+                            matched = true;
+                            break;
+                        }
+                    }
+
+                    // 4. 提取补充描述（如业务关闭、红elivery等）
+                    let extraDesc = '';
+                    if (eventStr.includes('business was closed')) {
+                        extraDesc = 'Business Closed';
+                    } else if (eventStr.includes('will redeliver')) {
+                        extraDesc = 'Will Redeliver';
+                    }
+
+                    // 5. 拼接最终格式
+                    if (matched) {
+                        const parts = [location, 'US', eventStatus];
+                        if (extraDesc) parts.push(extraDesc);
+                        return parts.join(', ');
+                    } else {
+                        // 未匹配到任何关键词时，直接返回原始事件描述
+                        return `US, US, ${eventStr}`;
+                    }
+                }    
+
+                // 格式化时间
+                function formatTime(dateTimeStr) {
+                    if (!dateTimeStr) return '';
+
+                    // 尝试从各种格式中提取时间部分
+                    const timeMatch = dateTimeStr.match(/(\d{2}:\d{2}:\d{2})/);
+                    if (timeMatch) {
+                        return timeMatch[1];
+                    }
+
+                    return dateTimeStr;
+                }
+
+                // 格式化日期（YYYY-MM-DD 格式）
+                function formatDate(dateStr) {
+                    if (!dateStr) return '未提供';
+
+                    try {
+                        let date;
+                        if (dateStr instanceof Date) {
+                            date = dateStr;
+                        } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateStr)) {
+                            date = new Date(dateStr);
+                        } else if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(dateStr)) {
+                            date = new Date(dateStr.replace(' ', 'T'));
+                        } else if (/^\d{8}$/.test(dateStr)) {
+                            date = new Date(
+                                parseInt(dateStr.substr(0, 4)),
+                                parseInt(dateStr.substr(4, 2)) - 1,
+                                parseInt(dateStr.substr(6, 2))
+                            );
+                        } else {
+                            date = new Date(dateStr);
+                        }
+
+                        if (isNaN(date.getTime())) {
+                            return dateStr;
+                        }
+
+                        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                    } catch (error) {
+                        console.error('日期格式化错误:', error);
+                        return dateStr;
+                    }
+                }
+
+                // 格式化日期时间（YYYY-MM-DD HH:MM:SS 格式）
+                function formatDateTime(dateTimeStr) {
+                    if (!dateTimeStr) return '未提供';
+
+                    try {
+                        let date;
+                        if (dateTimeStr instanceof Date) {
+                            date = dateTimeStr;
+                        } else {
+                            date = new Date(dateTimeStr);
+                            if (isNaN(date.getTime())) {
+                                const parts = dateTimeStr.split(/[T\s]/);
+                                if (parts.length >= 2) {
+                                    const datePart = parts[0].split('-');
+                                    const timePart = parts[1].split(':');
+
+                                    date = new Date(
+                                        parseInt(datePart[0]),
+                                        parseInt(datePart[1]) - 1,
+                                        parseInt(datePart[2]),
+                                        parseInt(timePart[0] || 0),
+                                        parseInt(timePart[1] || 0),
+                                        parseInt(timePart[2] || 0)
+                                    );
+                                }
+                            }
+                        }
+
+                        if (isNaN(date.getTime())) {
+                            return dateTimeStr;
+                        }
+
+                        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+                    } catch (error) {
+                        console.error('日期时间格式化错误:', error);
+                        return dateTimeStr;
+                    }
+                }
+
+                // 格式化显示日期（转换为本地格式）
+                function formatDisplayDate(dateStr) {
+                    if (!dateStr) return '';
+
+                    try {
+                        let date;
+                        if (dateStr instanceof Date) {
+                            date = dateStr;
+                        } else {
+                            if (dateStr.includes('-')) {
+                                const parts = dateStr.split('-');
+                                date = new Date(
+                                    parseInt(parts[0]),
+                                    parseInt(parts[1]) - 1,
+                                    parseInt(parts[2])
+                                );
+                            } else if (dateStr.includes('/')) {
+                                const parts = dateStr.split('/');
+                                date = new Date(
+                                    parseInt(parts[2]),
+                                    parseInt(parts[0]) - 1,
+                                    parseInt(parts[1])
+                                );
+                            } else {
+                                date = new Date(dateStr);
+                            }
+                        }
+
+                        if (isNaN(date.getTime())) {
+                            return dateStr;
+                        }
+
+                        return date.toLocaleDateString();
+                    } catch (error) {
+                        console.error('显示日期格式化错误:', error);
+                        return dateStr;
+                    }
+                }
+
+                // 格式化Amazon日期
+                function formatAmazonDate(timestamp) {
+                    if (!timestamp) return '';
+                    const date = new Date(timestamp);
+                    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                }
+
+                // 格式化Amazon时间
+                function formatAmazonTime(timestamp) {
+                    if (!timestamp) return '';
+                    const date = new Date(timestamp);
+                    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+                }
+
+                // 格式化Amazon状态
+                function formatAmazonStatus(statusCode) {
+                    if (!statusCode) return '未知状态';
+
+                    const statusMap = {
+                        // 原有映射
+                        'package_out_for_delivery': '包裹正在派送中',
+                        'package_delivered': '包裹已送达',
+                        // 新增事件编码映射
+                        'swa_rex_detail_creation_confirmed': '已创建',
+                        'swa_rex_detail_pickedUp': '已取件',
+                        'swa_rex_arrived_at_sort_center': '已到达分拣中心',
+                        'swa_rex_detail_departed': '已离开分拣中心',
+                        'swa_rex_detail_arrived_at_delivery_Center': '配送中',
+                        'swa_rex_detail_delivered': '已送达',
+                        'CreationConfirmed': '已创建',
+                        'PickupDone': '已取件',
+                        'Received': '已接收',
+                        'Departed': '已发出',
+                        'OutForDelivery': '派送中',
+                        'Delivered': '已送达'
+                    };
+
+                    return statusMap[statusCode] || statusCode;
+                }
+
+                // 从日期字符串中提取时区信息
+                function extractTimezone(dateStr) {
+                    if (!dateStr) return '+00:00';
+                    const match = dateStr.match(/[+-]\d{2}:\d{2}/);
+                    return match ? match[0] : '+00:00';
+                }
+
+                // 格式化Uniuni状态
+                function formatUniuniStatus(statusCode) {
+                    if (!statusCode) return '未知状态';
+
+                    const statusMap = {
+                        '190': '已创建',
+                        '199': '运输中',
+                        '195': '运输中',
+                        '200': '到达扫描',
+                        '202': '派送中',
+                        '203': '已送达',
+                        '7': '异常',
+                        '8': '已退回',
+                        '9': '待取件',
+                        '255': '运输中',
+                        '219':'运输中',
+                        '213':'退回仓库',
+                        '231':'妥投失败',
+                        '211':'妥投失败'
+                    };
+
+                    return statusMap[statusCode] || statusCode;
+                }
+
+                // 格式化Uniuni地址
+                function formatUniuniAddress(addressStr) {
+                    if (!addressStr) return '未知地点';
+                    
+                    // 处理常见格式问题
+                    addressStr = addressStr.replace(/, ,/g, ','); // 移除连续逗号
+                    addressStr = addressStr.trim();
+                    
+                    // 补充国家信息（默认美国）
+                    if (!addressStr.includes('美国') && !addressStr.includes('USA')) {
+                        addressStr += ', 美国';
+                    }
+                    
+                    return addressStr;
+                }
+
+                // 格式化UPS/USPS状态（增加USPS状态映射）
+                function formatUpsStatus(statusCode) {
+                    if (!statusCode) return '未知状态';
+
+                    const statusMap = {
+                        // 原有UPS状态映射
+                        'Pre-Transit': '运输准备中',
+                        'In Transit': '运输中',
+                        'Out for Delivery': '派送中',
+                        'Delivered': '已送达',
+                        'Exception': '异常',
+                        'Hold for Pickup': '待取件',
+                        'Return to Sender': '退回发件人',
+                        // 中文状态映射
+                        '已递送': '已送达',
+                        '准备今天递送': '派送中',
+                        '已装上递送车辆': '派送中',
+                        'UPS 设施处理': '运输中',
+                        '抵达设施': '运输中',
+                        '离开设施': '运输中',
+                        '发件人已创建标签，但是 UPS 尚未收到包裹': '运输准备中',
+                        // 新增USPS状态映射
+                        'Created Order': '已创建订单', // 对应USPS的Shipping Label Created
+                        'Accepted': '已接收' // 可根据实际需求补充
+                    };
+
+                    return statusMap[statusCode] || statusCode;
+                }
+
+                // 格式化位置信息
+                function formatLocation(locationObj) {
+                    if (!locationObj) return '未知';
+
+                    let parts = [];
+
+                    if (locationObj.city) parts.push(locationObj.city);
+                    if (locationObj.state) parts.push(locationObj.state);
+                    if (locationObj.country) parts.push(locationObj.country);
+
+                    return parts.length > 0 ? parts.join(', ') : '未知';
+                }
+
+                // 格式化国家代码
+                function formatCountryCode(countryCode) {
+                    if (!countryCode) return '未知';
+
+                    const countryMap = {
+                        'US': '美国',
+                        'CN': '中国',
+                        'JP': '日本',
+                        'KR': '韩国',
+                        'GB': '英国',
+                        'DE': '德国',
+                        'FR': '法国',
+                        'IT': '意大利',
+                        'ES': '西班牙',
+                        'CA': '加拿大',
+                        'AU': '澳大利亚',
+                        'IN': '印度',
+                        'BR': '巴西',
+                        'RU': '俄罗斯',
+                        'MX': '墨西哥',
+                        'SG': '新加坡',
+                        'MY': '马来西亚',
+                        'TH': '泰国',
+                        'VN': '越南',
+                        'ID': '印度尼西亚',
+                        'PH': '菲律宾',
+                        'NZ': '新西兰'
+                    };
+
+                    return countryMap[countryCode] || countryCode;
+                }
+
+                // 获取状态颜色
+                function getStatusColor(status) {
+                    const statusColors = {
+                        '已送达': '#22c55e',  // 绿色
+                        '派送中': '#f59e0b',  // 橙色
+                        '运输中': '#3b82f6',  // 蓝色
+                        '待取件': '#8b5cf6',  // 紫色
+                        '异常': '#ef4444',    // 红色
+                        '已退回': '#9ca3af',  // 灰色
+                        '运输准备中': '#64748b', // 深灰色
+                        '待重试': '#f59e0b',  // 橙色（表示需要重试）
+                        '查询异常': '#ef4444', // 红色（表示查询异常）
+                        '数据不完整': '#9ca3af', // 灰色（表示数据不完整）
+                        '处理异常': '#ef4444'  // 红色（表示处理异常）
+                    };
+
+                    // 检查状态是否匹配某个颜色类别
+                    for (const [colorStatus, color] of Object.entries(statusColors)) {
+                        if (status.includes(colorStatus)) {
+                            return color;
+                        }
+                    }
+
+                    // 默认颜色
+                    return '#64748b';
+                }
+
+                // 显示物流事件列表
+                function displayTrackingEvents(events, container) {
+                    if (!events || events.length === 0) {
+                        container.innerHTML = '<p>没有可用的物流跟踪历史记录</p>';
+                        return;
+                    }
+
+                    // 清空现有事件
+                    container.innerHTML = '';
+
+                    // 按时间降序排序（最新的事件在前）
+                    events.sort((a, b) => {
+                        const dateA = new Date(`${a.date}T${a.time}${a.gmtOffset}`);
+                        const dateB = new Date(`${b.date}T${b.time}${b.gmtOffset}`);
+                        return dateB - dateA;
+                    });
+
+                    // 创建事件时间线
+                    events.forEach((event, index) => {
+                        const isLatest = index === 0;
+                        const eventItem = document.createElement('div');
+                        eventItem.className = 'tracking-event ' + (isLatest ? 'latest-event' : '');
+
+                        // 格式化日期和时间显示
+                        const dateTimeStr = `${formatDisplayDate(event.date)} ${event.time.substr(0, 5)}`;
+                        const locationStr = event.location.replace(/, 未知$/, ''); // 优化显示
+
+                        eventItem.innerHTML = `
+                            <div class="event-dot ${isLatest ? 'latest-dot' : ''}"></div>
+                            <div class="event-line ${isLatest ? 'latest-line' : ''}"></div>
+                            <div class="event-content">
+                                <div class="event-date">${dateTimeStr}</div>
+                                <div class="event-status">${event.status}</div>
+                                <div class="event-location">${locationStr}</div>
+                            </div>
+                        `;
+
+                        container.appendChild(eventItem);
+                    });
+                }
+
+                // 添加包裹项
+                function addPackageItem(container, resultData) {
+                    const packageItem = document.createElement('div');
+                    packageItem.className = 'package-item';
+                    packageItem.dataset.trackingNumber = resultData.trackingNumber;
+
+                    packageItem.innerHTML = `
+                        <div class="package-header">
+                            <div class="tracking-info">
+                                <div class="tracking-number">${resultData.trackingNumber}</div>
+                                <div class="courier-info">${getCourierName(resultData.courier)}</div>
+                            </div>
+                            <button class="view-details">查看详情</button>
+                        </div>
+                    `;
+
+                    container.appendChild(packageItem);
+
+                    // 添加查看详情事件
+                    const viewButton = packageItem.querySelector('.view-details');
+                    viewButton.addEventListener('click', function() {
+                        showTrackingDetails(resultData);
+                    });
+
+                    // 添加点击包裹项查看详情事件
+                    packageItem.addEventListener('click', function(e) {
+                        if (e.target.closest('.package-header') || e.target === packageItem) {
+                            showTrackingDetails(resultData);
+                        }
+                    });
+                }
+
+                // 显示跟踪详情
+                function showTrackingDetails(data) {
+                    currentTrackingDetails = data;
+
+                    // 清空现有详情
+                    const detailsContainer = document.getElementById('trackingDetails');
+                    if (!detailsContainer) {
+                        // 创建详情容器
+                        const detailsDiv = document.createElement('div');
+                        detailsDiv.id = 'trackingDetails';
+                        detailsDiv.className = 'tracking-details';
+                        trackingResult.insertBefore(detailsDiv, trackingGroups.nextSibling);
+                    }
+
+                    // 填充详情内容
+                    document.getElementById('trackingDetails').innerHTML = `
+                        <div class="details-header">
+                            <h3>跟踪详情: ${data.trackingNumber}</h3>
+                            <button class="close-details">关闭</button>
+                        </div>
+                        <div class="details-content">
+                            <div class="details-summary">
+                                <div class="summary-item">
+                                    <div class="summary-label">物流商</div>
+                                    <div class="summary-value">${getCourierName(data.courier)}</div>
+                                </div>
+                                <div class="summary-item">
+                                    <div class="summary-label">订单状态</div>
+                                    <div class="summary-value" style="color: ${getStatusColor(data.status)};">${data.status}</div>
+                                </div>
+                                <div class="summary-item">
+                                    <div class="summary-label">预计送达日期</div>
+                                    <div class="summary-value">${data.estimatedDeliveryDate}</div>
+                                </div>
+                                <div class="summary-item">
+                                    <div class="summary-label">服务类型</div>
+                                    <div class="summary-value">${data.serviceType}</div>
+                                </div>
+                                <div class="summary-item">
+                                    <div class="summary-label">发货地</div>
+                                    <div class="summary-value">${data.originLocation}</div>
+                                </div>
+                                <div class="summary-item">
+                                    <div class="summary-label">目的地</div>
+                                    <div class="summary-value">${data.destinationLocation}</div>
+                                </div>
+                                <div class="summary-item">
+                                    <div class="summary-label">最后更新时间</div>
+                                    <div class="summary-value">${data.lastUpdated}</div>
+                                </div>
+                            </div>
+                            <div class="tracking-events-container">
+                                <h4>物流轨迹</h4>
+                                <div class="tracking-events"></div>
+                            </div>
+                        </div>
+                    `;
+
+                    // 显示物流事件
+                    const eventsContainer = document.getElementById('trackingDetails').querySelector('.tracking-events');
+                    displayTrackingEvents(data.events, eventsContainer);
+
+                    // 添加关闭详情事件
+                    document.querySelector('.close-details').addEventListener('click', function() {
+                        document.getElementById('trackingDetails').remove();
+                        currentTrackingDetails = null;
+                    });
+                }
+
+                // 获取物流商名称
+                function getCourierName(courierCode) {
+                    const courierNames = {
+                        'amazon': 'Amazon Logistics',
+                        'gofo': 'Gofo',
+                        'uniuni': 'Uniuni',
+                        'ups': 'UPS',
+                        'usps': 'USPS',
+                        'fedex': 'FedEx',
+                        'unknown': '未知物流商'
+                    };
+                    return courierNames[courierCode] || courierCode;
+                }
+
+                // 添加状态筛选器
+                function addStatusFilters(statuses) {
+                    if (statuses.size === 0) return;
+
+                    statusFilters.innerHTML = `
+                        <div class="status-filter-group">
+                            <button class="status-filter active" data-status="all">全部状态</button>
+                    `;
+
+                    statuses.forEach(status => {
+                        const color = getStatusColor(status);
+                        statusFilters.innerHTML += `
+                            <button class="status-filter" data-status="${status}" style="background-color: ${color};">${status}</button>
+                        `;
+                    });
+
+                    statusFilters.innerHTML += `</div>`;
+
+                    // 添加筛选事件
+                    document.querySelectorAll('.status-filter').forEach(filter => {
+                        filter.addEventListener('click', function() {
+                            document.querySelectorAll('.status-filter').forEach(f => f.classList.remove('active'));
+                            this.classList.add('active');
+
+                            const selectedStatus = this.dataset.status;
+                            filterPackages(selectedStatus);
+                        });
+                    });
+                }
+
+                // 筛选包裹
+                function filterPackages(status) {
+                    document.querySelectorAll('.package-item').forEach(item => {
+                        const itemStatus = item.closest('.status-group').dataset.status;
+                        if (status === 'all' || itemStatus === status) {
+                            item.style.display = 'block';
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+                }
+
+                // 显示/隐藏加载指示器
+                function showLoading(show) {
+                    loadingIndicator.style.display = show ? 'block' : 'none';
+                }
+
+                // 显示错误信息
+                function showError(message) {
+                    if (message) {
+                        errorMessage.innerHTML = message;
+                        errorMessage.style.display = 'block';
+                    } else {
+                        errorMessage.style.display = 'none';
+                    }
+                }
+
+                // 重置表单和结果
+                function resetForm() {
+                    trackingForm.reset();
+                    trackingNumbersInput.value = '';
+                    courierType.value = '';
+                    updateCourierHint('');
+                    showError('');
+                    showLoading(false);
+                    trackingResult.style.display = 'none';
+                    trackingGroups.innerHTML = '';
+                    if (statusFilters) {
+                        statusFilters.innerHTML = '';
+                    }
+                    if (document.getElementById('trackingDetails')) {
+                        document.getElementById('trackingDetails').remove();
+                    }
+                    currentTrackingDetails = null;
+                }
+
+                // 初始化页面
+                function init() {
+                    updateCourierHint('');
+                    showError('');
+                    showLoading(false);
+                    trackingResult.style.display = 'none';
+
+                    // 绑定刷新按钮事件
+                    document.getElementById('refreshPage').addEventListener('click', function() {
+                        resetForm();
+                        location.reload();
+                    });
+
+                    // 绑定侧边栏切换事件
+                    document.getElementById('menuToggle').addEventListener('click', function() {
+                        const sidebar = document.getElementById('sidebar');
+                        sidebar.classList.toggle('hidden');
+                    });
+                }
+
+                // 页面加载完成后初始化
+                init();
+            });
+            </script>
+            <div class="container">
+                <div class="header">
+                    <h2>物流查询中心</h2>
+                </div>
+                <div class="form-section">
+                    <form id="trackingForm" class="mb-5">
+                        <div class="form-group">
+                            <label for="courierType">选择物流商:</label>
+                            <select id="courierType" class="form-control">
+                                <option value="">请选择...</option>
+                                <option value="amazon">Amazon Logistics</option>
+                                <option value="gofo">Gofo</option>
+                                <option value="uniuni">Uniuni</option>
+                                <option value="ups">UPS</option>
+                                <option value="usps">USPS</option>
+                                <option value="fedex">FedEx</option>
+                            </select>
+                            <div id="courierHint">请选择物流商后输入对应的跟踪单号</div>
+                        </div>
+                        <div class="form-group">
+                            <label for="trackingNumbers">跟踪单号 (每行一个):</label>
+                            <textarea id="trackingNumbers" class="form-control" placeholder="输入多个物流单号，每行一个" rows="5"></textarea>
+                            <small class="form-text text-muted">例如：&#10;TBA322147753137&#10;GF6136598044528</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary">批量查询物流</button>
+                    </form>
+                    
+                    <div id="loadingIndicator">
+                        <div class="spinner"></div>
+                        <p>正在查询物流信息，请稍候...</p>
+                    </div>
+                    
+                    <div id="errorMessage"></div>
+                    
+                    <div id="trackingResult">
+                        <div id="statusFilters"></div>
+                        <div id="trackingGroups"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- 页面交互脚本 -->
+  <script>
+    // 初始化Element Plus
+    const { createApp, ref } = Vue;
+    const app = createApp({
+      setup() {
+        // 可以在这里添加Vue相关的状态和方法
+        return {
+          // 状态和方法
+        };
+      }
+    });
+    app.use(ElementPlus);
+    app.mount('#app');
+
+    // 页面基础交互 - 新增用户下拉菜单交互
+    document.addEventListener('DOMContentLoaded', function() {
+      // 处理移动端侧边栏切换
+      const menuToggle = document.getElementById('menuToggle');
+      const sidebar = document.getElementById('sidebar');
+      
+      if (menuToggle && sidebar) {
+        menuToggle.addEventListener('click', function() {
+          sidebar.classList.toggle('hidden');
+        });
+      }
+
+      // 点击外部关闭侧边栏（移动端）
+      document.addEventListener('click', function(e) {
+        if (window.innerWidth < 768 && 
+            !sidebar.classList.contains('hidden') &&
+            !e.target.closest('#sidebar') &&
+            e.target !== menuToggle &&
+            !e.target.closest('#menuToggle')) {
+          sidebar.classList.add('hidden');
+        }
+      });
+
+      // 响应式处理
+      window.addEventListener('resize', function() {
+        if (window.innerWidth >= 768) {
+          sidebar.classList.remove('hidden');
+        } else {
+          sidebar.classList.add('hidden');
+        }
+      });
+
+      // 用户下拉菜单交互
+      const userMenu = document.getElementById('userMenu');
+      const userDropdown = document.getElementById('userDropdown');
+      
+      if (userMenu && userDropdown) {
+        // 用户区域切换下拉菜单
+        userMenu.addEventListener('mouseenter', (e) => {
+            e.stopPropagation();
+            userDropdown.classList.toggle('active');
+        });
+        
+        // 鼠标移出隐藏下拉菜单
+        userContainer.addEventListener('mouseleave', () => {
+          userDropdown.classList.remove('active');
+        });
+        
+        // 阻止下拉框内部点击事件冒泡
+        userDropdown.addEventListener('click', function(e) {
+          e.stopPropagation();
+        });
+      }
+
+      // 退出登录功能
+      const logoutBtn = document.getElementById('logoutBtn');
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', function() {
+          if (confirm('确定要退出登录吗？')) {
+            // 清除本地存储
+            localStorage.removeItem('username');
+            localStorage.removeItem('hash');
+            // 重定向到登录页
+            window.location.href = 'https://wdbso.vip/index-login.html';
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>

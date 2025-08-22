@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人中心 - 管理系统</title>
+  <!-- 生产环境资源 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.3.9/dist/index.css">
+  <script src="https://unpkg.com/element-plus@2.3.9/dist/index.full.min.js"></script>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <link rel="icon" href="img/header.png" type="image/x-icon">
+  <!-- 请求拦截器 -->
+  <script>
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = function(url, options = {}) {
+          if (typeof url === 'string' && (url.includes('wdbso.vip') || url.startsWith('/'))) {
+              if (!url.includes('wdbso.vip/a') && !url.includes('wdbso.vip/b')) {
+                  if (!options.headers) options.headers = {};
+                  const hash = localStorage.getItem('hash');
+                  if (hash) options.headers['token'] = hash;
+              }
+          }
+          return originalFetch(url, options);
+      };
+      
+      const originalXHROpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+          if (typeof url === 'string' && url.includes('wdbso.vip')) {
+              this._url = url;
+          }
+          return originalXHROpen.apply(this, arguments);
+      };
+      
+      const originalXHRSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function(body) {
+          if (this._url && this._url.includes('wdbso.vip')) {
+              if (!this._url.includes('wdbso.vip/a') && !this._url.includes('wdbso.vip/b')) {
+                  const hash = localStorage.getItem('hash');
+                  if (hash) this.setRequestHeader('token', hash);  
+              }
+          }
+          return originalXHRSend.call(this, body);
+      };
+    })();
+  </script>
+  <!-- 公共样式配置 -->
+  <script>
+    // 初始化页面
+    async function initPage() {
+        const username = localStorage.getItem('username');
+        if (!username) {
+            // 未登录状态，重定向到登录页
+            window.location.href = 'https://wdbso.vip/index-login.html';
+            return;
+        }
+        // 确保用户名正确显示
+        updateUsernameDisplay(username);
+        // 初始化水印
+        initWatermark(username);
+        
+        // 监听窗口大小变化，重新调整水印
+        window.addEventListener('resize', () => {
+          initWatermark(username);
+        });
+      }
+      
+      // 单独的用户名显示更新函数，确保在各种情况下都能正确显示
+      function updateUsernameDisplay(username) {
+        const usernameDisplay = document.getElementById('usernameDisplay');
+        if (usernameDisplay && username) {
+          usernameDisplay.textContent = username;
+        } else if (usernameDisplay) {
+          usernameDisplay.textContent = '用户';
+        }
+      }
+      
+      // 页面加载完成后初始化
+      document.addEventListener('DOMContentLoaded', initPage);
+      
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: '#165DFF',
+              success: '#00B42A',
+              warning: '#FF7D00',
+              danger: '#F53F3F',
+              'neutral-100': '#F2F3F5',
+              'neutral-200': '#E5E6EB',
+              'neutral-300': '#C9CDD4',
+              'neutral-400': '#86909C',
+              'neutral-500': '#4E5969',
+              'neutral-600': '#1D2129',
+            },
+            fontFamily: { inter: ['Inter', 'system-ui', 'sans-serif'] },
+          },
+        }
+      }
+  </script>
+  
+  <style type="text/tailwindcss">
+  body {
+            cursor: url('img/mouse.png'), auto;
+            position: relative;
+        }
+    @layer utilities {
+      .content-auto { content-visibility: auto; }
+      .card-shadow { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); }
+      .hover-lift { transition: transform 0.2s, box-shadow 0.2s; }
+      .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12); }
+      .text-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      /* 评分星星样式 */
+      .star-rating {
+        display: flex;
+        align-items: center;
+      }
+      .star-rating i {
+        color: #FFD700;
+        cursor: pointer;
+        transition: color 0.2s;
+      }
+      .star-rating i.empty {
+        color: #E5E6EB;
+      }
+      /* 进度条样式 */
+      .rating-progress {
+        height: 8px;
+        background: #E5E6EB;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 4px;
+      }
+      .rating-progress-bar {
+        height: 100%;
+        background: #165DFF;
+        border-radius: 4px;
+        transition: width 0.5s ease;
+      }
+      /* 加载中样式 */
+      .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+      .loading-overlay.active {
+        opacity: 1;
+        pointer-events: all;
+      }
+      /* 月份选择器样式 */
+      .month-selector {
+        position: relative;
+        display: inline-block;
+      }
+      .month-dropdown {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        width: 180px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        z-index: 100;
+        overflow: hidden;
+        transform-origin: top right;
+        transform: scale(0.95);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.2s ease;
+      }
+      .month-dropdown.active {
+        transform: scale(1);
+        opacity: 1;
+        pointer-events: all;
+      }
+      .month-dropdown-item {
+        padding: 12px 16px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        font-size: 14px;
+      }
+      .month-dropdown-item:hover {
+        background-color: #F2F3F5;
+      }
+      .month-dropdown-item.active {
+        background-color: #E8F3FF;
+        color: #165DFF;
+        font-weight: 500;
+      }
+      /* 数据切换动画 */
+      .data-container {
+        transition: opacity 0.5s ease, transform 0.5s ease;
+      }
+      .data-container.loading {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      /* 水印样式 */
+      .watermark-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 999;
+        overflow: hidden;
+        opacity: 0.04;
+        background-repeat: repeat;
+      }
+      .watermark-text {
+        position: absolute;
+        font-size: 28px;
+        font-weight: 600;
+        color: #000000;
+        transform: rotate(-45deg);
+        white-space: nowrap;
+        user-select: none;
+        display: block;
+      }
+      /* 用户下拉菜单样式修复 */
+      .user-container {
+        position: relative;
+        z-index: 101; /* 确保用户菜单在其他元素之上 */
+      }
+      .user-dropdown {
+        /* 修复下拉菜单可能被截断的问题 */
+        display: none;
+        position: absolute;
+        right: 0;
+        top: 100%;
+        margin-top: 5px;
+        width: 180px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        z-index: 102;
+        overflow: hidden;
+        transform-origin: top right;
+        transform: scale(0.95);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.2s ease;
+      }
+      .user-dropdown.active {
+        display: block;
+        transform: scale(1);
+        opacity: 1;
+        pointer-events: all;
+      }
+      /* 移动端月份选择模态框 */
+      .month-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 200;
+        display: none;
+        justify-content: center;
+        align-items: flex-start;
+        padding-top: 20px;
+      }
+      .month-modal.active {
+        display: flex;
+      }
+      .month-modal-content {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        width: 90%;
+        max-width: 300px;
+      }
+      .month-modal-item {
+        padding: 10px;
+        text-align: center;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .month-modal-item:hover {
+        background-color: #F2F3F5;
+      }
+      .month-modal-item.active {
+        background-color: #165DFF;
+        color: white;
+      }
+    }
+  </style>
+</head>
+
+<body id="app">
+<!-- 水印容器 -->
+<div class="watermark-container" id="watermarkContainer"></div>
+
+<header class="bg-white border-b border-neutral-200 shadow-sm z-10 relative">
+  <div class="w-full px-4">
+    <div class="flex items-center justify-between h-16 max-w-full">
+      <!-- 左侧Logo和标题 -->
+      <div class="flex items-center space-x-2">
+        <button id="menuToggle" class="md:hidden text-neutral-600 hover:text-primary mr-2">
+          <i class="fa fa-bars text-xl"></i>
+        </button>
+        <div class="text-primary text-2xl">
+          <i class="fa fa-truck"></i>
+        </div>
+        <h1 class="text-xl font-bold text-neutral-600 whitespace-nowrap">管理系统</h1>
+      </div>
+      
+      <!-- 右侧用户区域 - 修复bug的核心部分 -->
+      <div class="flex items-center space-x-6 ml-auto">
+        <div class="relative cursor-pointer hover:text-primary transition-colors">
+          <i class="fa fa-bell-o text-lg"></i>
+          <span class="absolute -top-1 -right-1 bg-danger text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">3</span>
+        </div>
+        
+        <!-- 用户区域容器，修复z-index和定位问题 -->
+        <div class="user-container" id="userContainer">
+          <div class="flex items-center space-x-3 cursor-pointer group" id="userMenu">
+            <img src="/img/1.png" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm">
+            <span class="font-medium hidden md:inline-block" id="usernameDisplay">加载中...</span>
+            <i class="fa fa-angle-down text-neutral-400 group-hover:text-primary transition-colors"></i>
+          </div>
+          
+          <!-- 用户下拉菜单，修复显示问题 -->
+          <div class="user-dropdown" id="userDropdown">
+            <div class="py-2">
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-user-o mr-2 text-neutral-400"></i>个人中心
+              </a>
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog mr-2 text-neutral-400"></i>系统设置
+              </a>
+              <div class="border-t border-neutral-100 my-1"></div>
+              <button id="logoutBtn" class="w-full text-left px-4 py-2 text-sm text-danger hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-out mr-2"></i>退出登录
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+    <!-- 主内容区 -->
+    <div class="flex flex-1 overflow-hidden relative">
+      <!-- 侧边导航 -->
+      <aside class="w-64 bg-white border-r border-neutral-200 flex-shrink-0 hidden md:block transition-all duration-300" id="sidebar">
+        <nav class="py-4 h-full flex flex-col">
+          <div class="px-4 mb-4">
+            <div class="relative">
+              <input type="text" placeholder="搜索功能..." class="w-full py-2 px-3 pl-10 rounded-lg bg-neutral-100 border border-transparent focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm">
+              <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400"></i>
+            </div>
+          </div>
+          
+          <ul class="flex-1 overflow-y-auto py-2">
+            <li class="mb-1">
+              <a href="https://wdbso.vip/dashboard.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-dashboard w-5 text-center mr-3"></i>
+                <span>数据仪表盘</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khwuliu.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-history w-5 text-center mr-3"></i>
+                <span>客户物流详情</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khruku.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-in w-5 text-center mr-3"></i>
+                <span>入库管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/errorOrders.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-exclamation-circle w-5 text-center mr-3"></i>
+                <span>异常订单管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khyue.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-money w-5 text-center mr-3"></i>
+                <span>客户余额</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/wuliu.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>物流查询</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khsku.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>SKU排行榜</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/everyday.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-calendar-check-o w-5 text-center mr-3"></i>
+                <span>每日看板</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/jianhuo.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-clock-o w-5 text-center mr-3"></i>
+                <span>拣货时效管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="kh/settings.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog w-5 text-center mr-3"></i>
+                <span>系统设置</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/personalCenter.html" class="nav-link flex items-center px-4 py-3 text-primary bg-primary/5 border-r-4 border-primary font-medium">
+                <i class="fa fa-user w-5 text-center mr-3"></i>
+                <span>个人中心</span>
+              </a>
+            </li>
+          </ul>
+          
+          <div class="p-4 border-t border-neutral-200">
+            <div class="bg-primary/5 rounded-lg p-3">
+              <h4 class="font-medium text-primary text-sm mb-2">需要帮助？</h4>
+              <p class="text-neutral-500 text-xs mb-3">查看帮助文档或联系技术支持</p>
+              <a href="#" class="text-xs text-primary hover:underline">
+                <i class="fa fa-question-circle mr-1"></i> 帮助中心
+              </a>
+            </div>
+          </div>
+        </nav>
+      </aside>
+      
+      <!-- 个人中心内容 -->
+      <main class="flex-1 overflow-y-auto p-4 md:p-6 relative">
+        <!-- 页面标题和操作区 -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+          <div>
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-600">个人中心</h2>
+            <p class="text-neutral-400 mt-1">查看和管理您的账户信息与评价</p>
+          </div>
+          
+          <!-- 月份选择器 -->
+          <div class="month-selector mt-4 md:mt-0">
+            <div class="flex items-center space-x-2 cursor-pointer" id="monthSelector">
+              <i class="fa fa-calendar text-neutral-400"></i>
+              <span id="selectedMonth">2025年08月</span>
+              <i class="fa fa-angle-down text-neutral-400"></i>
+            </div>
+            
+            <div class="month-dropdown" id="monthDropdown">
+              <div class="month-dropdown-item active" data-month="2025-08">2025年08月</div>
+              <div class="month-dropdown-item" data-month="2025-07">2025年07月</div>
+              <div class="month-dropdown-item" data-month="2025-06">2025年06月</div>
+              <div class="month-dropdown-item" data-month="2025-05">2025年05月</div>
+              <div class="month-dropdown-item" data-month="2025-04">2025年04月</div>
+              <div class="month-dropdown-item" data-month="2025-03">2025年03月</div>
+              <div class="month-dropdown-item" data-month="2025-02">2025年02月</div>
+              <div class="month-dropdown-item" data-month="2025-01">2025年01月</div>
+              <div class="month-dropdown-item" data-month="2024-12">2024年12月</div>
+              <div class="month-dropdown-item" data-month="2024-11">2024年11月</div>
+              <div class="month-dropdown-item" data-month="2024-10">2024年10月</div>
+              <div class="month-dropdown-item" data-month="2024-09">2024年09月</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 用户基本信息卡片 -->
+        <div class="bg-white rounded-xl p-5 card-shadow hover-lift mb-6 data-container">
+          <h3 class="font-bold text-neutral-600 text-lg mb-4">基本信息</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="border-b border-t border-neutral-200 md:border-0 md:border-r border-neutral-200 pb-4 md:pb-0">
+              <p class="text-neutral-400 text-sm">用户ID</p>
+              <p class="text-neutral-600 font-medium" id="userId">USR-789456</p>
+            </div>
+            <div class="border-b border-t border-neutral-200 md:border-0 md:border-r border-neutral-200 pb-4 md:pb-0">
+              <p class="text-neutral-400 text-sm">客户代码</p>
+              <p class="text-neutral-600 font-medium" id="customerCode">CUS-12345</p>
+            </div>
+            <div class="border-b border-t border-neutral-200 md:border-0 md:border-r border-neutral-200 pb-4 md:pb-0">
+              <p class="text-neutral-400 text-sm">注册时间</p>
+              <p class="text-neutral-600 font-medium" id="registerTime">2023-05-18</p>
+            </div>
+            <div class="border-b border-t border-neutral-200 md:border-0 pb-4 md:pb-0">
+              <p class="text-neutral-400 text-sm">账户状态</p>
+              <p class="text-neutral-600 font-medium"><span class="px-2 py-1 text-xs bg-success/10 text-success rounded-full">正常</span></p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 评分卡片 -->
+        <div class="bg-white rounded-xl p-5 card-shadow hover-lift mb-6 data-container">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+            <h3 class="font-bold text-neutral-600 text-lg">满意度评分</h3>
+            <p class="text-neutral-400 mt-2 md:mt-0" id="ratingMonth">2025年08月</p>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- 总体满意度 -->
+            <div class="border border-neutral-200 rounded-lg p-4 hover:border-primary/50 transition-colors">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-medium text-neutral-600">总体满意度</h4>
+                <span class="text-lg font-bold text-primary" id="overallRating">4.8</span>
+              </div>
+              <div class="star-rating mb-2" id="overallStars">
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star-half-o"></i>
+              </div>
+              <div class="rating-progress">
+                <div class="rating-progress-bar" style="width: 96%"></div>
+              </div>
+            </div>
+            
+            <!-- 响应速度 -->
+            <div class="border border-neutral-200 rounded-lg p-4 hover:border-primary/50 transition-colors">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-medium text-neutral-600">响应速度</h4>
+                <span class="text-lg font-bold text-primary" id="responseRating">4.7</span>
+              </div>
+              <div class="star-rating mb-2" id="responseStars">
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star-o"></i>
+              </div>
+              <div class="rating-progress">
+                <div class="rating-progress-bar" style="width: 94%"></div>
+              </div>
+            </div>
+            
+            <!-- 问题解决能力 -->
+            <div class="border border-neutral-200 rounded-lg p-4 hover:border-primary/50 transition-colors">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-medium text-neutral-600">问题解决能力</h4>
+                <span class="text-lg font-bold text-primary" id="problemRating">4.9</span>
+              </div>
+              <div class="star-rating mb-2" id="problemStars">
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+              </div>
+              <div class="rating-progress">
+                <div class="rating-progress-bar" style="width: 98%"></div>
+              </div>
+            </div>
+            
+            <!-- 专业程度 -->
+            <div class="border border-neutral-200 rounded-lg p-4 hover:border-primary/50 transition-colors">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-medium text-neutral-600">专业程度</h4>
+                <span class="text-lg font-bold text-primary" id="professionalRating">4.6</span>
+              </div>
+              <div class="star-rating mb-2" id="professionalStars">
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star-o"></i>
+              </div>
+              <div class="rating-progress">
+                <div class="rating-progress-bar" style="width: 92%"></div>
+              </div>
+            </div>
+            
+            <!-- 服务态度 -->
+            <div class="border border-neutral-200 rounded-lg p-4 hover:border-primary/50 transition-colors">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-medium text-neutral-600">服务态度</h4>
+                <span class="text-lg font-bold text-primary" id="attitudeRating">4.8</span>
+              </div>
+              <div class="star-rating mb-2" id="attitudeStars">
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star"></i>
+                <i class="fa fa-star-half-o"></i>
+              </div>
+              <div class="rating-progress">
+                <div class="rating-progress-bar" style="width: 96%"></div>
+              </div>
+            </div>
+            
+            <!-- 评分趋势 -->
+            <div class="border border-neutral-200 rounded-lg p-4 hover:border-primary/50 transition-colors">
+              <h4 class="font-medium text-neutral-600 mb-3">评分趋势</h4>
+              <div class="h-40">
+                <canvas id="ratingTrendChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 反馈详情卡片 -->
+        <div class="bg-white rounded-xl p-5 card-shadow hover-lift mb-6 data-container">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+            <h3 class="font-bold text-neutral-600 text-lg">反馈详情</h3>
+            <p class="text-neutral-400 mt-2 md:mt-0" id="feedbackMonth">2025年08月</p>
+          </div>
+          
+          <div class="space-y-6" id="feedbackDetails">
+            <!-- 反馈内容 -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="font-medium text-neutral-600">反馈类型</h4>
+                <span class="px-2 py-1 text-xs bg-primary/10 text-primary rounded-full" id="feedbackType">服务咨询</span>
+              </div>
+              <div class="border border-neutral-200 rounded-lg p-4" id="feedbackContent">
+                <p class="text-neutral-600">您好，我想咨询一下关于国际物流跟踪的问题。我的包裹显示已到达当地分拣中心，但已经超过3天没有更新状态了。请问这种情况通常是什么原因导致的？是否需要我做什么操作？另外，我想了解一下如果包裹丢失，贵公司的赔偿流程是怎样的？谢谢！</p>
+              </div>
+            </div>
+            
+            <!-- 跟进状态 -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="font-medium text-neutral-600">跟进状态</h4>
+                <span class="px-2 py-1 text-xs bg-success/10 text-success rounded-full" id="followUpStatus">已解决</span>
+              </div>
+              <div class="border border-neutral-200 rounded-lg p-4" id="followUpDetails">
+                <p class="text-neutral-600">客服人员在收到反馈后1小时内联系了用户，解释了包裹状态未更新可能是由于当地物流中心扫描延迟导致的。同时提供了当地物流客服的联系方式，并指导用户如何进一步查询。24小时后用户反馈包裹状态已更新，问题已解决。客服随后发送了满意度调查链接，用户给予了五星评价。</p>
+              </div>
+            </div>
+            
+            <!-- 提交信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-neutral-400 text-sm">评价提交时间</p>
+                  <p class="text-neutral-600 font-medium" id="feedbackTime">2025-08-15 14:30:22</p>
+                </div>
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-neutral-400 text-sm">设备详情</p>
+                  <p class="text-neutral-600 font-medium" id="deviceInfo">Windows 10, Chrome 116.0.5845.187</p>
+                </div>
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-neutral-400 text-sm">IP地址</p>
+                  <p class="text-neutral-600 font-medium" id="ipAddress">192.168.1.101</p>
+                </div>
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-neutral-400 text-sm">客服人员</p>
+                  <p class="text-neutral-600 font-medium" id="客服人员">CS-0078</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 历史反馈记录 -->
+        <div class="bg-white rounded-xl p-5 card-shadow hover-lift data-container">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+            <h3 class="font-bold text-neutral-600 text-lg">历史反馈记录</h3>
+            <a href="#" class="text-primary hover:text-primary/80 text-sm flex items-center">
+              <span>查看全部</span>
+              <i class="fa fa-angle-right ml-1"></i>
+            </a>
+          </div>
+          
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[800px]">
+              <thead>
+                <tr class="border-b border-neutral-200">
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">反馈类型</th>
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">提交时间</th>
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">跟进状态</th>
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">满意度评分</th>
+                  <th class="text-left py-3 px-4 text-neutral-500 font-medium text-sm">操作</th>
+                </tr>
+              </thead>
+              <tbody id="historyFeedback">
+                <tr class="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
+                  <td class="py-3 px-4 text-sm" data-month="2025-07">物流查询</td>
+                  <td class="py-3 px-4 text-sm text-neutral-500">2025-07-22 09:15:30</td>
+                  <td class="py-3 px-4">
+                    <span class="px-2 py-1 text-xs bg-success/10 text-success rounded-full">已解决</span>
+                  </td>
+                  <td class="py-3 px-4">
+                    <div class="star-rating" style="font-size: 12px; margin: 0">
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                    </div>
+                  </td>
+                  <td class="py-3 px-4 text-sm">
+                    <button class="text-primary hover:text-primary/80 view-feedback" data-month="2025-07">查看</button>
+                  </td>
+                </tr>
+                <tr class="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
+                  <td class="py-3 px-4 text-sm" data-month="2025-06">账户问题</td>
+                  <td class="py-3 px-4 text-sm text-neutral-500">2025-06-10 16:42:15</td>
+                  <td class="py-3 px-4">
+                    <span class="px-2 py-1 text-xs bg-success/10 text-success rounded-full">已解决</span>
+                  </td>
+                  <td class="py-3 px-4">
+                    <div class="star-rating" style="font-size: 12px; margin: 0">
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star-half-o"></i>
+                    </div>
+                  </td>
+                  <td class="py-3 px-4 text-sm">
+                    <button class="text-primary hover:text-primary/80 view-feedback" data-month="2025-06">查看</button>
+                  </td>
+                </tr>
+                <tr class="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
+                  <td class="py-3 px-4 text-sm" data-month="2025-05">价格咨询</td>
+                  <td class="py-3 px-4 text-sm text-neutral-500">2025-05-05 11:28:45</td>
+                  <td class="py-3 px-4">
+                    <span class="px-2 py-1 text-xs bg-success/10 text-success rounded-full">已解决</span>
+                  </td>
+                  <td class="py-3 px-4">
+                    <div class="star-rating" style="font-size: 12px; margin: 0">
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star-o"></i>
+                    </div>
+                  </td>
+                  <td class="py-3 px-4 text-sm">
+                    <button class="text-primary hover:text-primary/80 view-feedback" data-month="2025-05">查看</button>
+                  </td>
+                </tr>
+                <tr class="hover:bg-neutral-50 transition-colors">
+                  <td class="py-3 px-4 text-sm" data-month="2025-04">系统建议</td>
+                  <td class="py-3 px-4 text-sm text-neutral-500">2025-04-18 13:55:20</td>
+                  <td class="py-3 px-4">
+                    <span class="px-2 py-1 text-xs bg-warning/10 text-warning rounded-full">处理中</span>
+                  </td>
+                  <td class="py-3 px-4">
+                    <div class="star-rating" style="font-size: 12px; margin: 0">
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                      <i class="fa fa-star"></i>
+                    </div>
+                  </td>
+                  <td class="py-3 px-4 text-sm">
+                    <button class="text-primary hover:text-primary/80 view-feedback" data-month="2025-04">查看</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- 分页 -->
+          <div class="flex items-center justify-between mt-6">
+            <p class="text-sm text-neutral-400">显示 1 至 4 条，共 12 条</p>
+            <el-pagination
+              v-model:current-page="currentPage"
+              :page-size="10"
+              :total="12"
+              layout="prev, pager, next"
+            ></el-pagination>
+          </div>
+        </div>
+      </main>
+    </div>
+    
+    <!-- 加载中遮罩层 -->
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="flex flex-col items-center">
+        <i class="fa fa-circle-o-notch fa-spin text-primary text-3xl mb-2"></i>
+        <p class="text-neutral-600">加载数据中，请稍候...</p>
+      </div>
+    </div>
+    
+    <!-- 月份选择模态框（移动端） -->
+    <div class="month-modal" id="monthModal">
+      <div class="month-modal-content">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-lg text-neutral-600">选择月份</h3>
+          <button id="closeMonthModal" class="text-neutral-400 hover:text-neutral-600">
+            <i class="fa fa-times"></i>
+          </button>
+        </div>
+        <div class="grid grid-cols-3 gap-2" id="monthModalContent">
+          <div class="month-modal-item active" data-month="2025-08">2025-08</div>
+          <div class="month-modal-item" data-month="2025-07">2025-07</div>
+          <div class="month-modal-item" data-month="2025-06">2025-06</div>
+          <div class="month-modal-item" data-month="2025-05">2025-05</div>
+          <div class="month-modal-item" data-month="2025-04">2025-04</div>
+          <div class="month-modal-item" data-month="2025-03">2025-03</div>
+          <div class="month-modal-item" data-month="2025-02">2025-02</div>
+          <div class="month-modal-item" data-month="2025-01">2025-01</div>
+          <div class="month-modal-item" data-month="2024-12">2024-12</div>
+        </div>
+      </div>
+    </div>
+  </script>
+  <script>
+    // 全局存储各月份数据
+    window.monthlyData = {
+      '2025-08': {
+        userId: 'USR-789456',
+        customerCode: 'CUS-12345',
+        registerTime: '2023-05-18',
+        overallRating: 4.8,
+        responseRating: 4.7,
+        problemRating: 4.9,
+        professionalRating: 4.6,
+        attitudeRating: 4.8,
+        feedbackType: '服务咨询',
+        feedbackContent: '您好，我想咨询一下关于国际物流跟踪的问题。我的包裹显示已到达当地分拣中心，但已经超过3天没有更新状态了。请问这种情况通常是什么原因导致的？是否需要我做什么操作？另外，我想了解一下如果包裹丢失，贵公司的赔偿流程是怎样的？谢谢！',
+        followUpStatus: '已解决',
+        followUpDetails: '客服人员在收到反馈后1小时内联系了用户，解释了包裹状态未更新可能是由于当地物流中心扫描延迟导致的。同时提供了当地物流客服的联系方式，并指导用户如何进一步查询。24小时后用户反馈包裹状态已更新，问题已解决。客服随后发送了满意度调查链接，用户给予了五星评价。',
+        feedbackTime: '2025-08-15 14:30:22',
+        deviceInfo: 'Windows 10, Chrome 116.0.5845.187',
+        ipAddress: '192.168.1.101',
+        staff: 'CS-0078'
+      },
+      '2025-07': {
+        userId: 'USR-789456',
+        customerCode: 'CUS-12345',
+        registerTime: '2023-05-18',
+        overallRating: 4.7,
+        responseRating: 4.6,
+        problemRating: 4.8,
+        professionalRating: 4.5,
+        attitudeRating: 4.7,
+        feedbackType: '物流查询',
+        feedbackContent: '我的包裹跟踪号为1Z999AA10123456784，显示已经派送但我尚未收到。请问是否可以安排重新派送？另外，能否提供当地快递员的联系方式？谢谢！',
+        followUpStatus: '已解决',
+        followUpDetails: '客服核实后发现包裹被误送到相邻地址，立即联系当地物流安排重新派送，并向用户提供了快递员的联系方式。包裹在24小时内成功送达，用户对处理结果表示满意。',
+        feedbackTime: '2025-07-22 09:15:30',
+        deviceInfo: 'Mac OS 13.5, Safari 16.6',
+        ipAddress: '10.0.0.5',
+        staff: 'CS-0042'
+      },
+      '2025-06': {
+        userId: 'USR-789456',
+        customerCode: 'CUS-12345',
+        registerTime: '2023-05-18',
+        overallRating: 4.6,
+        responseRating: 4.5,
+        problemRating: 4.7,
+        professionalRating: 4.4,
+        attitudeRating: 4.6,
+        feedbackType: '账户问题',
+        feedbackContent: '我无法登录账户，系统提示用户名或密码错误。我已经尝试重置密码，但没有收到重置邮件。请帮助解决登录问题，并检查我的邮箱是否被正确记录在系统中。',
+        followUpStatus: '已解决',
+        followUpDetails: '客服检查后发现用户输入的邮箱有误，正确邮箱应为user@example.com。协助用户更正邮箱信息后，重置密码邮件成功发送。用户顺利登录账户，并更新了个人信息。',
+        feedbackTime: '2025-06-10 16:42:15',
+        deviceInfo: 'Windows 11, Edge 114.0.1823.82',
+        ipAddress: '172.16.1.20',
+        staff: 'CS-0091'
+      },
+      '2025-05': {
+        userId: 'USR-789456',
+        customerCode: 'CUS-12345',
+        registerTime: '2023-05-18',
+        overallRating: 4.5,
+        responseRating: 4.4,
+        problemRating: 4.6,
+        professionalRating: 4.3,
+        attitudeRating: 4.5,
+        feedbackType: '价格咨询',
+        feedbackContent: '我想了解一下针对长期客户的优惠政策，以及批量发货的折扣方案。另外，能否提供不同物流渠道的价格对比表？我司每月发货量约500-800票，希望能获得更详细的报价信息。',
+        followUpStatus: '已解决',
+        followUpDetails: '客服向用户发送了长期客户优惠政策和批量发货折扣方案，并安排客户经理与用户联系，提供了个性化的报价方案。用户表示将在下周确认发货计划，并感谢客服的详细解答。',
+        feedbackTime: '2025-05-05 11:28:45',
+        deviceInfo: 'Android 13, Chrome 114.0.5735.199',
+        ipAddress: '192.168.2.75',
+        staff: 'CS-0033'
+      },
+      '2025-04': {
+        userId: 'USR-789456',
+        customerCode: 'CUS-12345',
+        registerTime: '2023-05-18',
+        overallRating: 4.7,
+        responseRating: 4.6,
+        problemRating: 4.8,
+        professionalRating: 4.6,
+        attitudeRating: 4.7,
+        feedbackType: '系统建议',
+        feedbackContent: '建议在物流跟踪页面添加批量查询功能，支持同时输入多个跟踪号进行查询。另外，可以增加物流状态变化的短信通知功能，方便用户及时了解包裹动态。希望这些建议能被考虑，谢谢！',
+        followUpStatus: '处理中',
+        followUpDetails: '客服已将用户建议记录并提交给产品团队，产品经理将在下周与用户联系，进一步了解需求细节。预计该功能将在下次系统升级时进行评估和开发。',
+        feedbackTime: '2025-04-18 13:55:20',
+        deviceInfo: 'iOS 16.6, Safari 16.6',
+        ipAddress: '203.0.113.45',
+        staff: 'CS-0015'
+      }
+    };
+    
+    // 初始化水印
+    function initWatermark(username) {
+      const container = document.getElementById('watermarkContainer');
+      if (!container || !username) return;
+      
+      // 清空现有水印
+      container.innerHTML = '';
+      
+      // 获取视窗尺寸
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // 计算水印数量和间距
+      const step = 200;
+      const horizontalCount = Math.ceil(windowWidth / step) + 1;
+      const verticalCount = Math.ceil(windowHeight / step) + 1;
+      
+      // 创建水印网格
+      for (let i = 0; i < verticalCount; i++) {
+        for (let j = 0; j < horizontalCount; j++) {
+          const watermark = document.createElement('div');
+          watermark.className = 'watermark-text';
+          watermark.textContent = username;
+          
+          // 计算位置
+          const left = j * step - step/2;
+          const top = i * step - step/2;
+          
+          // 设置位置和样式
+          watermark.style.left = `${left}px`;
+          watermark.style.top = `${top}px`;
+          
+          container.appendChild(watermark);
+        }
+      }
+    }
+    
+    // 等待DOM完全加载
+    document.addEventListener('DOMContentLoaded', function() {
+      // 创建Vue实例
+      const { createApp, ref } = Vue;
+      const app = createApp({
+        setup() {
+          // 响应式数据
+          const currentPage = ref(1);
+          const selectedMonth = ref('2025-08');
+          
+          // 初始化图表
+          function initCharts() {
+            const trendCtx = document.getElementById('ratingTrendChart');
+            if (!trendCtx) return;
+            
+            // 评分趋势图
+            new Chart(trendCtx.getContext('2d'), {
+              type: 'line',
+              data: {
+                labels: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月'],
+                datasets: [{
+                  label: '总体满意度',
+                  data: [4.2, 4.3, 4.5, 4.7, 4.5, 4.6, 4.7, 4.8],
+                  borderColor: '#165DFF',
+                  backgroundColor: 'rgba(22, 93, 255, 0.1)',
+                  tension: 0.4,
+                  fill: true
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  y: { 
+                    min: 4, 
+                    max: 5, 
+                    grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                    ticks: { stepSize: 0.5 }
+                  },
+                  x: { grid: { display: false } }
+                }
+              }
+            });
+          }
+          
+          // 汉堡菜单切换
+          const menuToggle = document.getElementById('menuToggle');
+          if (menuToggle) {
+            menuToggle.addEventListener('click', () => {
+              const sidebar = document.getElementById('sidebar');
+              if (sidebar) sidebar.classList.toggle('hidden');
+            });
+          }
+          
+          // 初始化图表
+          initCharts();
+          
+          // 渲染指定月份的数据
+          function renderMonthData(month) {
+            const data = monthlyData[month] || monthlyData['2025-08'];
+            const year = month.split('-')[0];
+            const monthNum = month.split('-')[1];
+            
+            // 更新月份显示
+            document.getElementById('selectedMonth').textContent = `${year}年${monthNum}月`;
+            document.getElementById('ratingMonth').textContent = `${year}年${monthNum}月`;
+            document.getElementById('feedbackMonth').textContent = `${year}年${monthNum}月`;
+            
+            // 更新基本信息
+            document.getElementById('userId').textContent = data.userId;
+            document.getElementById('customerCode').textContent = data.customerCode;
+            document.getElementById('registerTime').textContent = data.registerTime;
+            
+            // 更新评分数据
+            document.getElementById('overallRating').textContent = data.overallRating;
+            document.getElementById('responseRating').textContent = data.responseRating;
+            document.getElementById('problemRating').textContent = data.problemRating;
+            document.getElementById('professionalRating').textContent = data.professionalRating;
+            document.getElementById('attitudeRating').textContent = data.attitudeRating;
+            
+            // 更新星星评分
+            updateStarRating('overallStars', data.overallRating);
+            updateStarRating('responseStars', data.responseRating);
+            updateStarRating('problemStars', data.problemRating);
+            updateStarRating('professionalStars', data.professionalRating);
+            updateStarRating('attitudeStars', data.attitudeRating);
+            
+            // 更新反馈详情
+            document.getElementById('feedbackType').textContent = data.feedbackType;
+            document.getElementById('feedbackContent').textContent = data.feedbackContent;
+            document.getElementById('followUpStatus').textContent = data.followUpStatus;
+            document.getElementById('followUpDetails').textContent = data.followUpDetails;
+            document.getElementById('feedbackTime').textContent = data.feedbackTime;
+            document.getElementById('deviceInfo').textContent = data.deviceInfo;
+            document.getElementById('ipAddress').textContent = data.ipAddress;
+            document.getElementById('客服人员').textContent = data.staff;
+            
+            // 更新历史记录中选中的行
+            document.querySelectorAll('#historyFeedback tr').forEach(row => {
+              const rowMonth = row.querySelector('td').dataset.month;
+              if (rowMonth === month) {
+                row.classList.add('bg-primary/5');
+              } else {
+                row.classList.remove('bg-primary/5');
+              }
+            });
+          }
+          
+          // 更新星星评分显示
+          function updateStarRating(containerId, rating) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            // 清空现有星星
+            container.innerHTML = '';
+            
+            // 计算整数和小数部分
+            const integerPart = Math.floor(rating);
+            const decimalPart = rating - integerPart;
+            
+            // 添加实心星星
+            for (let i = 0; i < integerPart; i++) {
+              const star = document.createElement('i');
+              star.className = 'fa fa-star';
+              container.appendChild(star);
+            }
+            
+            // 添加半星（如果有）
+            if (decimalPart >= 0.5) {
+              const star = document.createElement('i');
+              star.className = 'fa fa-star-half-o';
+              container.appendChild(star);
+            }
+            
+            // 添加空心星星
+            for (let i = 0; i < 5 - integerPart - (decimalPart >= 0.5 ? 1 : 0); i++) {
+              const star = document.createElement('i');
+              star.className = 'fa fa-star-o empty';
+              container.appendChild(star);
+            }
+          }
+          
+          // 显示加载状态
+          function showLoading() {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const dataContainers = document.querySelectorAll('.data-container');
+            
+            loadingOverlay.classList.add('active');
+            dataContainers.forEach(container => {
+              container.classList.add('loading');
+            });
+          }
+          
+          // 隐藏加载状态
+          function hideLoading() {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const dataContainers = document.querySelectorAll('.data-container');
+            
+            loadingOverlay.classList.remove('active');
+            setTimeout(() => {
+              dataContainers.forEach(container => {
+                container.classList.remove('loading');
+              });
+            }, 300);
+          }
+          
+          // 月份选择器逻辑
+          const monthSelector = document.getElementById('monthSelector');
+          const monthDropdown = document.getElementById('monthDropdown');
+          const monthModal = document.getElementById('monthModal');
+          const closeMonthModal = document.getElementById('closeMonthModal');
+          const monthModalItems = document.querySelectorAll('#monthModalContent .month-modal-item');
+          const monthDropdownItems = document.querySelectorAll('.month-dropdown-item');
+          
+          if (monthSelector && monthDropdown) {
+            monthSelector.addEventListener('click', (e) => {
+              e.stopPropagation();
+              monthDropdown.classList.toggle('active');
+              monthModal.classList.remove('active');
+            });
+          }
+          
+          if (monthSelector && monthModal) {
+            monthSelector.addEventListener('click', (e) => {
+              if (window.innerWidth < 768) {
+                e.stopPropagation();
+                monthModal.classList.add('active');
+                monthDropdown.classList.add('active');
+              }
+            });
+          }
+          
+          if (closeMonthModal) {
+            closeMonthModal.addEventListener('click', () => {
+              monthModal.classList.remove('active');
+            });
+          }
+          
+          // 点击页面其他地方关闭下拉菜单
+          document.addEventListener('click', () => {
+            monthDropdown.classList.remove('active');
+            monthModal.classList.remove('active');
+          });
+          
+          // 月份下拉菜单项点击事件
+          monthDropdownItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+              e.stopPropagation();
+              monthDropdown.classList.remove('active');
+              const month = item.dataset.month;
+              selectedMonth.value = month;
+              
+              showLoading();
+              setTimeout(() => {
+                renderMonthData(month);
+                hideLoading();
+              }, 300);
+              
+              // 更新选中状态
+              monthDropdownItems.forEach(i => i.classList.remove('active'));
+              item.classList.add('active');
+            });
+          });
+          
+          // 月份模态框项点击事件
+          monthModalItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+              e.stopPropagation();
+              monthModal.classList.remove('active');
+              const month = item.dataset.month;
+              selectedMonth.value = month;
+              
+              showLoading();
+              setTimeout(() => {
+                renderMonthData(month);
+                hideLoading();
+              }, 300);
+              
+              // 更新选中状态
+              monthModalItems.forEach(i => i.classList.remove('active'));
+              item.classList.add('active');
+            });
+          });
+          
+          // 历史反馈查看按钮点击事件
+          document.querySelectorAll('.view-feedback').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const month = btn.dataset.month;
+              showLoading();
+              setTimeout(() => {
+                renderMonthData(month);
+                hideLoading();
+              }, 300);
+            });
+          });
+          
+          return { currentPage, selectedMonth };
+        }
+      });
+      
+      // 全局注册Element Plus
+      app.use(ElementPlus);
+      app.mount('#app');
+      
+      // 用户下拉菜单逻辑 - 修复核心
+      const userContainer = document.getElementById('userContainer');
+      const userMenu = document.getElementById('userMenu');
+      const userDropdown = document.getElementById('userDropdown');
+      
+      // 确保元素存在再执行
+      if (userMenu && userDropdown) {
+        // 点击用户菜单切换下拉框显示状态
+        userMenu.addEventListener('click', (e) => {
+          e.stopPropagation(); // 防止事件冒泡导致立即关闭
+          userDropdown.classList.toggle('active');
+        });
+        
+        // 点击页面其他地方关闭下拉菜单
+        document.addEventListener('click', () => {
+          userDropdown.classList.remove('active');
+        });
+        
+        // 阻止下拉菜单内部点击事件冒泡
+        userDropdown.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+      }
+      
+      // 退出登录功能修复
+      const logoutBtn = document.getElementById('logoutBtn');
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          
+          // 确保所有存储的用户信息都被清除
+          localStorage.removeItem('hash');
+          localStorage.removeItem('username');
+          localStorage.removeItem('token');
+          
+          // 延迟重定向，确保操作完成
+          setTimeout(() => {
+            checkHash();
+          }, 300);
+        });
+      }
+      
+      // 初始化渲染当前月份数据
+      renderMonthData('2025-08');
+    });
+    
+    // 登录状态检查
+    function checkHash() {
+      if (!localStorage.getItem('hash')) {
+        alert('会话已过期，请重新登录');
+        window.location.href = 'http://wdbso.vip/index-login.html';
+      }
+    }
+  </script>
+</body>
+</html>

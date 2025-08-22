@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>客户物流详情 - 管理系统</title>
+  <!-- 引入外部资源 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.3.9/dist/index.css">
+  <script src="https://unpkg.com/element-plus@2.3.9/dist/index.full.min.js"></script>
+  <!-- 引入Element Plus中文语言包（使用本地路径，确保文件存在） -->
+  <script src="/js/chinese.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <link rel="icon" href="/img/header.png" type="image/x-icon">
+  
+  <!-- 请求拦截器 -->
+  <script>
+    (function() {
+      // 保存原始的fetch方法
+      const originalFetch = window.fetch;
+      // 重写fetch方法
+      window.fetch = function(url, options = {}) {
+          if (typeof url === 'string' && (url.includes('wdbso.vip') || url.startsWith('/'))) {
+              // 排除特定路径
+              if (!url.includes('wdbso.vip/a') && !url.includes('wdbso.vip/b')) {
+                  if (!options.headers) {
+                      options.headers = {};
+                  }
+                  const hash = localStorage.getItem('hash');
+                  if (hash) {
+                      options.headers['token'] = hash;
+                  }
+              }
+          }
+          return originalFetch(url, options);
+      };
+      
+      // 重写XMLHttpRequest以拦截AJAX请求
+      const originalXHROpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+          // 检查是否是wdbso.vip域名
+          if (typeof url === 'string' && url.includes('wdbso.vip')) {
+              // 保存url以便在send方法中使用
+              this._url = url;
+          }
+          return originalXHROpen.apply(this, arguments);
+      };
+      
+      const originalXHRSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function(body) {
+          if (this._url && this._url.includes('wdbso.vip')) {
+              // 排除特定路径
+              if (!this._url.includes('wdbso.vip/a') && !this._url.includes('wdbso.vip/b')) {
+                  const hash = localStorage.getItem('hash');
+                  if (hash) {
+                      this.setRequestHeader('token', hash);  
+                  }
+              }
+          }
+          return originalXHRSend.call(this, body);
+      };
+    })();
+  </script>
+  
+  <!-- 配置Tailwind -->
+  <script>
+   // 初始化页面
+    async function initPage() {
+        const username = localStorage.getItem('username');
+        if (!username) {
+            // 未登录状态，重定向到登录页
+            window.location.href = 'https://wdbso.vip/index-login.html';
+            return;
+        }
+        // 获取并显示用户名
+        const usernameDisplay = document.getElementById('usernameDisplay');
+        if (usernameDisplay) {
+          usernameDisplay.textContent = username || '未知用户';
+        }
+        // 初始化水印（确保覆盖整个页面）
+          initWatermark(username);
+          
+          // 监听窗口大小变化，重新调整水印
+          window.addEventListener('resize', () => {
+            initWatermark(username);
+          });
+
+        // 初始化用户下拉菜单（鼠标移入显示）
+        const userContainer = document.getElementById('userContainer');
+        const userDropdown = document.getElementById('userDropdown');
+        if (userContainer && userDropdown) {
+          userContainer.addEventListener('mouseenter', () => {
+            userDropdown.classList.add('active');
+          });
+          userContainer.addEventListener('mouseleave', () => {
+            userDropdown.classList.remove('active');
+          });
+        }
+        
+        // 绑定退出登录事件
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+          localStorage.removeItem('hash');
+          localStorage.removeItem('username');
+          localStorage.removeItem('token');
+          checkHash();
+        });
+    }
+
+    // 检查登录状态
+    function checkHash() {
+      const hash = localStorage.getItem('hash');
+      if (!hash) {
+        redirectToLogin();
+      }
+    }
+    
+    // 重定向到登录页
+    function redirectToLogin() {
+      alert('会话已过期，请重新登录');
+      window.location.href = 'http://wdbso.vip/index-login.html';
+    }
+
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', initPage);
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            success: '#00B42A',
+            warning: '#FF7D00',
+            danger: '#F53F3F',
+            'neutral-100': '#F2F3F5',
+            'neutral-200': '#E5E6EB',
+            'neutral-300': '#C9CDD4',
+            'neutral-400': '#86909C',
+            'neutral-500': '#4E5969',
+            'neutral-600': '#1D2129',
+          },
+          fontFamily: { inter: ['Inter', 'system-ui', 'sans-serif'] },
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    body {
+            cursor: url('/img/mouse.png'), auto;
+            position: relative; /* 确保水印能正确定位 */
+        }
+    @layer utilities {
+      .content-auto { content-visibility: auto; }
+      .card-shadow { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); }
+      .hover-lift { transition: transform 0.2s, box-shadow 0.2s; }
+      .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12); }
+      .text-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      /* 用户下拉菜单样式 */
+      .user-dropdown {
+        position: absolute;
+        right: 0;
+        top: 100%;
+        margin-top: 5px;
+        width: 180px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        z-index: 100;
+        overflow: hidden;
+        transform-origin: top right;
+        transform: scale(0.95);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.2s ease;
+      }
+      .user-dropdown.active {
+        transform: scale(1);
+        opacity: 1;
+        pointer-events: all;
+      }
+      /* 客户物流详情模块样式 */
+      .filter-panel {
+        background: #f9f9f9;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .filter-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-bottom: 15px;
+        align-items: center;
+      }
+      .filter-item {
+        display: flex;
+        align-items: center;
+        min-width: 220px;
+      }
+      .filter-item label {
+        width: 100px;
+        font-weight: 500;
+        color: #666;
+      }
+      .filter-item input, .filter-item .el-date-editor {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        min-width: 150px;
+      }
+      .filter-actions {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      .btn-primary {
+        background: #165DFF;
+        color: white;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .btn-primary:hover {
+        background: #409eff;
+      }
+      .btn-secondary {
+        background: #fff;
+        color: #666;
+        border: 1px solid #ddd;
+        padding: 8px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .btn-secondary:hover {
+        background: #f5f5f5;
+      }
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        min-width: 1300px; /* 增加表格最小宽度以容纳新字段 */
+      }
+      .data-table th, .data-table td {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid #e5e6eb;
+      }
+      .data-table th {
+        background-color: #f2f3f5;
+        font-weight: 500;
+        color: #4e5969;
+      }
+      .data-table tr:hover {
+        background-color: #f9f9f9;
+      }
+      .loading-row td {
+        padding: 40px 0;
+        text-align: center;
+      }
+      .spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(64, 158, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #409eff;
+        animation: spin 1s ease-in-out infinite;
+        margin-right: 10px;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      .pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-top: 20px;
+        gap: 15px;
+        padding: 10px 0;
+        flex-wrap: wrap;
+      }
+      .page-btn {
+        padding: 5px 12px;
+        border: 1px solid #ddd;
+        background: white;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      .page-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .page-btn:hover:not(:disabled) {
+        background: #f0f0f0;
+      }
+            /* 水印样式 - 确保覆盖整个页面 */
+      .watermark-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;  /* 视窗宽度 */
+        height: 100vh; /* 视窗高度 */
+        pointer-events: none; /* 不影响交互 */
+        z-index: 999; /* 确保在内容上方但不遮挡UI元素 */
+        overflow: hidden;
+        opacity: 0.04; /* 更淡的透明度，不影响内容阅读 */
+        background-repeat: repeat; /* 重复平铺 */
+      }
+      .watermark-text {
+        position: absolute;
+        font-size: 28px; /* 稍大的字体 */
+        font-weight: 600;
+        color: #000000;
+        transform: rotate(-45deg);
+        white-space: nowrap; /* 防止文本换行 */
+        user-select: none; /* 禁止选择 */
+        display: block;
+      }
+    }
+  </style>
+</head>
+
+<body class="font-inter bg-neutral-100 text-neutral-600 min-h-screen flex flex-col">
+  <div id="app" class="flex flex-col h-screen overflow-hidden">
+      <div class="watermark-container" id="watermarkContainer"></div>
+    <!-- 顶部导航栏 -->
+    <header class="bg-white border-b border-neutral-200 shadow-sm z-10">
+  <div class="w-full px-4"> <!-- 移除container mx-auto限制，使用全宽 -->
+    <div class="flex items-center justify-between h-16 max-w-full"> <!-- 允许最大宽度为全屏 -->
+      <!-- 左侧Logo和标题 - 强制居左 -->
+      <div class="flex items-center space-x-2">
+        <!-- 汉堡菜单按钮 - 放在Logo左侧，确保Logo始终在更左侧 -->
+        <button id="menuToggle" class="md:hidden text-neutral-600 hover:text-primary mr-2">
+          <i class="fa fa-bars text-xl"></i>
+        </button>
+        <div class="text-primary text-2xl">
+          <i class="fa fa-truck"></i>
+        </div>
+        <h1 class="text-xl font-bold text-neutral-600 whitespace-nowrap">管理系统</h1>
+      </div>
+      
+      <!-- 右侧用户区域 - 强制居右（新增下拉菜单） -->
+      <div class="flex items-center space-x-6 ml-auto"> <!-- ml-auto确保推到最右侧 -->
+        <!-- 通知图标 -->
+        <div class="relative cursor-pointer hover:text-primary transition-colors">
+          <i class="fa fa-bell-o text-lg"></i>
+          <span class="absolute -top-1 -right-1 bg-danger text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">3</span>
+        </div>
+        <!-- 用户信息及下拉菜单 -->
+        <div class="relative" id="userContainer">
+          <div class="flex items-center space-x-3 cursor-pointer group" id="userMenu">
+            <img src="/img/1.png" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm">
+            <span class="font-medium hidden md:inline-block" id="usernameDisplay">加载中...</span>
+            <i class="fa fa-angle-down text-neutral-400 group-hover:text-primary transition-colors"></i>
+          </div>
+          
+          <!-- 用户下拉菜单 -->
+          <div class="user-dropdown" id="userDropdown">
+            <div class="py-2">
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-user-o mr-2 text-neutral-400"></i>个人中心
+              </a>
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog mr-2 text-neutral-400"></i>系统设置
+              </a>
+              <div class="border-t border-neutral-100 my-1"></div>
+              <button id="logoutBtn" class="w-full text-left px-4 py-2 text-sm text-danger hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-out mr-2"></i>退出登录
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+    
+    <!-- 主内容区 -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- 侧边导航 -->
+      <aside class="w-64 bg-white border-r border-neutral-200 flex-shrink-0 hidden md:block transition-all duration-300" id="sidebar">
+        <nav class="py-4 h-full flex flex-col">
+          <div class="px-4 mb-4">
+            <div class="relative">
+              <input type="text" placeholder="搜索功能..." class="w-full py-2 px-3 pl-10 rounded-lg bg-neutral-100 border border-transparent focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm">
+              <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400"></i>
+            </div>
+          </div>
+          
+          <ul class="flex-1 overflow-y-auto py-2">
+            <li class="mb-1">
+              <a href="https://wdbso.vip/dashboard.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-dashboard w-5 text-center mr-3"></i>
+                <span>数据仪表盘</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khwuliu.html" class="nav-link flex items-center px-4 py-3 text-primary bg-primary/5 border-r-4 border-primary font-medium">
+                <i class="fa fa-history w-5 text-center mr-3"></i>
+                <span>客户物流详情</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khruku.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-in w-5 text-center mr-3"></i>
+                <span>入库管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/errorOrders.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-exclamation-circle w-5 text-center mr-3"></i>
+                <span>异常订单管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khyue.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-money w-5 text-center mr-3"></i>
+                <span>客户余额</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/wuliu.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>物流查询</span>
+              </a>
+            </li>
+            <!-- SKU排行榜导航项 -->
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khsku.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>SKU排行榜</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/everyday.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-calendar-check-o w-5 text-center mr-3"></i>
+                <span>每日看板</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/jianhuo.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-clock-o w-5 text-center mr-3"></i>
+                <span>拣货时效管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/settings.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog w-5 text-center mr-3"></i>
+                <span>系统设置</span>
+              </a>
+            </li>
+          </ul>
+          
+          <!-- 底部帮助区域 -->
+          <div class="p-4 border-t border-neutral-200">
+            <div class="bg-primary/5 rounded-lg p-3">
+              <h4 class="font-medium text-primary text-sm mb-2">需要帮助？</h4>
+              <p class="text-neutral-500 text-xs mb-3">查看帮助文档或联系技术支持</p>
+              <a href="#" class="text-xs text-primary hover:underline">
+                <i class="fa fa-question-circle mr-1"></i> 帮助中心
+              </a>
+            </div>
+          </div>
+        </nav>
+      </aside>
+      
+      <!-- 客户物流详情内容 -->
+      <main class="flex-1 overflow-y-auto p-4 md:p-6">
+        <section id="kh_wuliu" class="kh-wuliu-container">
+          <div class="page-header">
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-600">物流数据管理</h2>
+            <p class="text-neutral-400 mt-1">支持多条件查询，每页最多展示200条数据</p>
+          </div>
+    
+          <!-- 筛选条件区域 -->
+          <div class="filter-panel">
+            <div class="filter-actions">
+              <button id="batchUpdateBtn" class="btn-primary" style="margin-left: 10px;">批量更新选中数据</button>
+              <button id="queryBtn" class="btn-primary">查询</button>
+              <button id="resetBtn" class="btn-secondary">重置</button>
+              <div class="data-limit-hint">
+                <i class="icon-info"></i> 每页最多展示200条数据，共 <span id="totalCount">0</span> 条
+              </div>
+            </div>
+    
+            <div class="filter-row">
+              <div class="filter-item">
+                <label for="warehouse">仓库：</label>
+                <input type="text" id="warehouse" placeholder="支持模糊匹配（如CA）" />
+              </div>
+              <div class="filter-item">
+                <label for="customerName">客户：</label>
+                <input type="text" id="customerName" placeholder="请输入客户名称" />
+              </div>
+              <div class="filter-item">
+                <label>出库日期：</label>
+                <el-date-picker
+                  v-model="outboundDateRange"
+                  type="daterange"
+                  range-separator="至"
+                  start-placeholder="开始日期"
+                  end-placeholder="结束日期"
+                  class="w-full"
+                ></el-date-picker>
+              </div>
+              <div class="filter-item">
+                <label for="channel">渠道：</label>
+                <input type="text" id="channel" placeholder="请输入渠道名称" />
+              </div>
+              <div class="filter-item">
+                <label for="trackingNumber">跟踪单号：</label>
+                <input type="text" id="trackingNumber" placeholder="请输入跟踪单号" />
+              </div>
+              <!-- 新增：出库单号筛选框 -->
+              <div class="filter-item">
+                <label for="outboundNumber">出库单号：</label>
+                <input type="text" id="outboundNumber" placeholder="请输入出库单号" />
+              </div>
+            </div>
+    
+            <div class="filter-row">
+              <div class="filter-item">
+                <label>上网时间：</label>
+                <el-date-picker
+                  v-model="onlineDateRange"
+                  type="daterange"
+                  range-separator="至"
+                  start-placeholder="开始日期"
+                  end-placeholder="结束日期"
+                  class="w-full"
+                ></el-date-picker>
+              </div>
+              <div class="filter-item">
+                <label>妥投时间：</label>
+                <el-date-picker
+                  v-model="deliveryDateRange"
+                  type="daterange"
+                  range-separator="至"
+                  start-placeholder="开始日期"
+                  end-placeholder="结束日期"
+                  class="w-full"
+                ></el-date-picker>
+              </div>
+              <div class="filter-item">
+                <label for="logisticsStatus">物流状态：</label>
+                <input type="text" id="logisticsStatus" placeholder="如：妥投、在途" />
+              </div>
+              <div class="filter-item">
+                <label for="logisticsProvider">物流商：</label>
+                <input type="text" id="logisticsProvider" placeholder="请输入物流商名称" />
+              </div>
+            </div>
+          </div>
+    
+          <!-- 数据展示表格 -->
+          <div class="bg-white rounded-xl card-shadow overflow-hidden">
+            <div class="table-wrapper overflow-x-auto">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width: 50px;">
+                      <input type="checkbox" id="checkAll" title="全选当前页">
+                    </th>
+                    <th>客户名称</th>
+                    <th>跟踪单号</th>
+                    <th>出库单号</th> <!-- 新增：出库单号列 -->
+                    <th>仓库</th>
+                    <th>渠道</th>
+                    <th>出库时间</th>
+                    <th>上网时间</th>
+                    <th>妥投时间</th>
+                    <th>最新轨迹详情</th>
+                    <th>最新轨迹时间</th>
+                    <th>物流状态</th>
+                    <th>物流商</th>
+                    <th>上网时效（天）</th>
+                    <th>运输时效（天）</th>
+                  </tr>
+                </thead>
+                <tbody id="wuliuTableBody">
+                  <!-- 数据加载中提示 -->
+                  <tr class="loading-row">
+                    <td colspan="15" class="text-center"> <!-- 列数从14调整为15 -->
+                      <div class="spinner"></div>
+                      <p>正在加载数据...</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+    
+            <!-- 分页控件 -->
+            <div class="pagination" id="pagination">
+              <button class="page-btn" id="prevPage">上一页</button>
+              <span class="page-info" id="pageInfo">第 1 页 / 共 0 页</span>
+              <button class="page-btn" id="nextPage">下一页</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+  // 初始化水印（确保覆盖整个页面）
+    function initWatermark(username) {
+      const container = document.getElementById('watermarkContainer');
+      if (!container || !username) return;
+      
+      // 清空现有水印
+      container.innerHTML = '';
+      
+      // 获取视窗尺寸，确保水印覆盖整个可见区域
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // 计算水印数量和间距（增加密度确保完全覆盖）
+      const step = 200; // 水印间距（像素）- 更小的间距意味着更密集的水印
+      const horizontalCount = Math.ceil(windowWidth / step) + 1; // 水平方向水印数量
+      const verticalCount = Math.ceil(windowHeight / step) + 1;   // 垂直方向水印数量
+      
+      // 创建水印网格
+      for (let i = 0; i < verticalCount; i++) {
+        for (let j = 0; j < horizontalCount; j++) {
+          const watermark = document.createElement('div');
+          watermark.className = 'watermark-text';
+          watermark.textContent = username;
+          
+          // 计算位置（覆盖整个视窗）
+          const left = j * step - step/2; // 向左偏移一半间距，确保边缘也有覆盖
+          const top = i * step - step/2;  // 向上偏移一半间距
+          
+          // 设置位置和样式
+          watermark.style.left = `${left}px`;
+          watermark.style.top = `${top}px`;
+          
+          container.appendChild(watermark);
+        }
+      }
+    }
+    // 创建Vue实例
+    const { createApp, ref, onMounted } = Vue;
+    
+    createApp({
+      setup() {
+        // 客户物流详情模块的日期范围
+        const outboundDateRange = ref([]);
+        const onlineDateRange = ref([]);
+        const deliveryDateRange = ref([]);
+        
+        // 页面加载完成后初始化
+        onMounted(() => {
+          // 初始化客户物流详情模块
+          initCustomerLogisticsModule();
+          
+          // 汉堡菜单切换
+          const menuToggle = document.getElementById('menuToggle');
+          if (menuToggle) {
+            menuToggle.addEventListener('click', () => {
+              const sidebar = document.getElementById('sidebar');
+              if (sidebar) {
+                sidebar.classList.toggle('hidden');
+              }
+            });
+          }
+        });
+        
+        // 初始化客户物流详情模块
+        function initCustomerLogisticsModule() {
+          // 用立即执行函数（IIFE）封装kh_wuliu的逻辑，隔离作用域
+          (function() {
+            // 局部变量（仅在当前作用域有效，不污染全局）
+            let currentPage = 1;
+            const pageSize = 200; // 固定每页200条
+            let totalData = []; // 全部数据
+            let totalPages = 0; // 总页数
+
+            // 安全DOM操作工具函数
+            const domUtils = {
+              getElement: (id) => document.getElementById(id),
+              setText: (id, text) => {
+                const element = domUtils.getElement(id);
+                if (element) {
+                  element.textContent = text;
+                } else {
+                  console.warn(`Element ${id} not found, skipping text update`);
+                }
+              },
+              setHtml: (id, html) => {
+                const element = domUtils.getElement(id);
+                if (element) {
+                  element.innerHTML = html;
+                } else {
+                  console.warn(`Element ${id} not found, skipping HTML update`);
+                }
+              },
+              addClass: (id, className) => {
+                const element = domUtils.getElement(id);
+                if (element) {
+                  element.classList.add(className);
+                }
+              },
+              removeClass: (id, className) => {
+                const element = domUtils.getElement(id);
+                if (element) {
+                  element.classList.remove(className);
+                }
+              },
+              setDisabled: (id, disabled) => {
+                const element = domUtils.getElement(id);
+                if (element) {
+                  element.disabled = disabled;
+                }
+              }
+            };
+
+            // 页面加载完成后初始化（仅作用于kh_wuliu内部）
+            console.log('物流数据管理页面初始化');
+            // 初始化时加载默认数据
+            fetchWuliuData();
+            
+            // 绑定查询按钮事件
+            domUtils.getElement('queryBtn')?.addEventListener('click', () => {
+              console.log('点击查询按钮，当前页重置为1');
+              currentPage = 1; // 重置为第一页
+              fetchWuliuData();
+            });
+            
+            // 绑定重置按钮事件
+            domUtils.getElement('resetBtn')?.addEventListener('click', resetFilter);
+            
+            // 绑定分页按钮事件
+            domUtils.getElement('prevPage')?.addEventListener('click', () => {
+              console.log(`点击上一页，当前页: ${currentPage}`);
+              if (currentPage > 1) {
+                currentPage--;
+                renderTable();
+                updatePagination();
+              }
+            });
+            
+            domUtils.getElement('nextPage')?.addEventListener('click', () => {
+              console.log(`点击下一页，当前页: ${currentPage}, 总页数: ${totalPages}`);
+              if (currentPage < totalPages) {
+                currentPage++;
+                renderTable();
+                updatePagination();
+              }
+            });
+            
+            // 绑定全选事件
+            bindCheckboxEvents();
+            // 绑定批量更新按钮事件
+            bindBatchUpdateEvent();
+
+            /**
+             * 重置筛选条件
+             */
+            function resetFilter() {
+              console.log('重置筛选条件');
+              // 清空所有输入框
+              document.querySelectorAll('#kh_wuliu .filter-item input').forEach(input => {
+                input.value = '';
+              });
+              
+              // 若希望重置后不启用任何默认时间条件，可设置一个极早的开始时间（如2000-01-01）
+              // 这样后端会认为用户指定了时间条件，从而不触发默认的“近7天”
+              outboundDateRange.value = ['2000-01-01', null]; // 仅设置开始时间，不限制结束时间
+              onlineDateRange.value = [];
+              deliveryDateRange.value = [];
+              
+              currentPage = 1;
+              fetchWuliuData(); 
+            }
+            
+            /**
+             * 收集筛选条件参数（新增出库单号筛选）
+             */
+            function getFilterParams() {
+              const params = new URLSearchParams();
+              
+              // 仓库（模糊匹配）
+              const warehouse = domUtils.getElement('warehouse')?.value.trim() || '';
+              if (warehouse) params.append('warehouse', warehouse);
+              
+              // 客户名称
+              const customerName = domUtils.getElement('customerName')?.value.trim() || '';
+              if (customerName) params.append('customerName', customerName);
+              
+              // 出库日期范围（格式化日期）
+              if (outboundDateRange.value && outboundDateRange.value.length === 2) {
+                const startDate = formatDate(outboundDateRange.value[0]);
+                const endDate = formatDate(outboundDateRange.value[1]);
+                if (startDate && endDate) {
+                  params.append('startDate', startDate);
+                  params.append('endDate', endDate);
+                }
+              }
+              
+              // 渠道
+              const channel = domUtils.getElement('channel')?.value.trim() || '';
+              if (channel) params.append('channel', channel);
+              
+              // 跟踪单号
+              const trackingNumber = domUtils.getElement('trackingNumber')?.value.trim() || '';
+              if (trackingNumber) params.append('trackingNumber', trackingNumber);
+              
+              // 新增：出库单号筛选
+              const outboundNumber = domUtils.getElement('outboundNumber')?.value.trim() || '';
+              if (outboundNumber) params.append('outboundNumber', outboundNumber);
+              
+              // 上网时间范围（格式化日期）
+              if (onlineDateRange.value && onlineDateRange.value.length === 2) {
+                const onlineStart = formatDate(onlineDateRange.value[0]);
+                const onlineEnd = formatDate(onlineDateRange.value[1]);
+                if (onlineStart && onlineEnd) {
+                  params.append('onlineStart', onlineStart);
+                  params.append('onlineEnd', onlineEnd);
+                }
+              }
+              
+              // 妥投时间范围（格式化日期）
+              if (deliveryDateRange.value && deliveryDateRange.value.length === 2) {
+                const deliveryStart = formatDate(deliveryDateRange.value[0]);
+                const deliveryEnd = formatDate(deliveryDateRange.value[1]);
+                if (deliveryStart && deliveryEnd) {
+                  params.append('deliveryStart', deliveryStart);
+                  params.append('deliveryEnd', deliveryEnd);
+                }
+              }
+              
+              // 物流状态
+              const logisticsStatus = domUtils.getElement('logisticsStatus')?.value.trim() || '';
+              if (logisticsStatus) params.append('logisticsStatus', logisticsStatus);
+              
+              // 物流商
+              const logisticsProvider = domUtils.getElement('logisticsProvider')?.value.trim() || '';
+              if (logisticsProvider) params.append('logisticsProvider', logisticsProvider);
+              
+              return params;
+            }
+
+            /**
+             * 从接口获取物流数据
+             */
+            async function fetchWuliuData() {
+              console.log('开始获取物流数据...');
+              const tableBody = domUtils.getElement('wuliuTableBody');
+              // 显示加载状态
+              if (tableBody) {
+                tableBody.innerHTML = `
+                  <tr class="loading-row">
+                    <td colspan="15" class="text-center"> <!-- 列数从14调整为15 -->
+                      <div class="spinner"></div>
+                      <p>正在加载数据...</p>
+                    </td>
+                  </tr>
+                `;
+              }
+              
+              try {
+                // 获取筛选参数
+                const params = getFilterParams();
+                console.log('请求参数:', params.toString()); // 打印参数，便于调试
+                
+                // 调用接口（使用后端提供的/kh_wuliu接口）
+                const response = await fetch(`/kh_wuliu?${params.toString()}`);
+                
+                if (!response.ok) {
+                  throw new Error(`接口请求失败: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                console.log('API响应:', result);
+                
+                // 验证API返回格式
+                if (!result || typeof result !== 'object') {
+                  throw new Error('API返回格式不正确');
+                }
+                
+                if (result.success) {
+                  // 验证数据格式
+                  if (!Array.isArray(result.data)) {
+                    console.error('API返回的数据不是数组格式:', result.data);
+                    result.data = [];
+                  }
+                  
+                  totalData = result.data || [];
+                  console.log(`成功获取 ${totalData.length} 条数据`);
+                  
+                  // 重新计算总页数
+                  totalPages = Math.ceil(totalData.length / pageSize);
+                  console.log(`总页数计算为: ${totalPages}`);
+                  
+                  // 防止当前页超过总页数
+                  if (currentPage > totalPages && totalPages > 0) {
+                    console.log(`当前页(${currentPage})超过总页数(${totalPages})，自动调整到最后一页`);
+                    currentPage = totalPages;
+                  }
+                  
+                  // 渲染表格和更新分页
+                  console.log(`渲染第 ${currentPage} 页数据`);
+                  renderTable();
+                  updatePagination();
+                  domUtils.setText('totalCount', totalData.length);
+                } else {
+                  throw new Error(result.error || '获取数据失败');
+                }
+              } catch (error) {
+                // 显示错误信息
+                if (tableBody) {
+                  tableBody.innerHTML = `
+                    <tr>
+                      <td colspan="15" class="text-center" style="color: #f56c6c; padding: 40px 0;"> <!-- 列数从14调整为15 -->
+                        <p>数据加载失败：${error.message}</p>
+                        <button class="btn-secondary" onclick="fetchWuliuData()">重试</button>
+                      </td>
+                    </tr>
+                  `;
+                }
+                console.error('数据获取失败:', error);
+              }
+            }
+
+            /**
+             * 渲染表格数据（分页展示，新增出库单号列）
+             */
+            function renderTable() {
+              console.log(`渲染表格: 当前页=${currentPage}, 每页=${pageSize}, 总数据=${totalData.length}`);
+              const tableBody = domUtils.getElement('wuliuTableBody');
+              if (!tableBody) return;
+              
+              // 计算当前页数据
+              const startIndex = (currentPage - 1) * pageSize;
+              const endIndex = Math.min(startIndex + pageSize, totalData.length);
+              const currentData = totalData.slice(startIndex, endIndex);
+              
+              console.log(`当前页数据范围: ${startIndex}-${endIndex-1}`);
+              
+              if (currentData.length === 0) {
+                tableBody.innerHTML = `
+                  <tr>
+                    <td colspan="15" class="text-center" style="padding: 40px 0; color: #666;"> <!-- 列数从14调整为15 -->
+                      没有找到匹配的数据，请尝试调整筛选条件
+                    </td>
+                  </tr>
+                `;
+                return;
+              }
+              
+              // 生成表格行（包含复选框和出库单号）
+              tableBody.innerHTML = currentData.map(item => `
+                <tr>
+                  <td>
+                    <input type="checkbox" class="row-checkbox" value="${item.ID || ''}" title="选择此条数据">
+                  </td>
+                  <td>${item.客户名称 || '-'}</td>
+                  <td>${item.跟踪单号 || '-'}</td>
+                  <td>${item.出库单号 || '-'}</td> <!-- 新增：出库单号列 -->
+                  <td>${item.仓库 || '-'}</td>
+                  <td>${item.渠道 || '-'}</td>
+                  <td>${formatDateTime(item.出库时间)}</td>
+                  <td>${formatDateTime(item.上网时间)}</td>
+                  <td>${formatDateTime(item.妥投时间)}</td>
+                  <td data-content="${item.最新轨迹详情 || '-'}">${item.最新轨迹详情 || '-'}</td>
+                  <td>${formatDateTime(item.最新轨迹时间)}</td>
+                  <td>${item.物流状态 || '-'}</td>
+                  <td>${item.物流商 || '-'}</td>
+                  <td>${item.上网时效 !== null ? (item.上网时效 / 24).toFixed(1) + '天' : '-'}</td>
+                  <td>${item.运输时效 !== null ? (item.运输时效 / 24).toFixed(1) + '天' : '-'}</td>
+                </tr>
+              `).join('');
+              
+              // 重置全选框状态
+              const checkAll = domUtils.getElement('checkAll');
+              if (checkAll) {
+                checkAll.checked = false;
+              }
+            }
+
+            /**
+             * 更新分页信息
+             */
+            function updatePagination() {
+              console.log(`更新分页信息: 当前页=${currentPage}, 总页数=${totalPages}`);
+              // 更新页码显示
+              domUtils.setText('pageInfo', `第 ${currentPage} 页 / 共 ${totalPages || 0} 页`);
+              
+              // 控制按钮状态
+              const prevBtn = domUtils.getElement('prevPage');
+              const nextBtn = domUtils.getElement('nextPage');
+              
+              if (prevBtn) {
+                prevBtn.disabled = currentPage <= 1;
+              }
+              if (nextBtn) {
+                nextBtn.disabled = currentPage >= totalPages || totalPages === 0;
+              }
+              
+              console.log(`分页按钮状态: 上一页=${prevBtn?.disabled ? '禁用' : '启用'}, 下一页=${nextBtn?.disabled ? '禁用' : '启用'}`);
+              
+              // 额外检查：确保按钮状态与数据一致
+              if (totalData.length === 0) {
+                console.log('无数据，禁用所有分页按钮');
+                if (prevBtn) prevBtn.disabled = true;
+                if (nextBtn) nextBtn.disabled = true;
+              }
+            }
+
+            /**
+             * 格式化日期时间（将ISO格式转为本地格式）
+             */
+            function formatDateTime(dateString) {
+              if (!dateString || dateString === '0000-00-00 00:00:00') return '-';
+              
+              // 处理可能的时间戳格式
+              if (typeof dateString === 'number') {
+                dateString = new Date(dateString).toISOString();
+              }
+              
+              // 处理不同格式的日期字符串
+              if (dateString.includes('T')) {
+                // ISO格式 (2023-01-01T12:00:00)
+                dateString = dateString.replace('T', ' ');
+              }
+              
+              // 尝试解析日期
+              const date = new Date(dateString);
+              if (isNaN(date.getTime())) {
+                console.warn('无法解析的日期格式:', dateString);
+                return '-';
+              }
+              
+              // 根据时间精度选择不同的格式
+              if (dateString.includes(':') && dateString.length > 10) {
+                // 包含时间的格式
+                return date.toLocaleString('zh-CN', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }).replace(/\//g, '-');
+              } else {
+                // 只有日期的格式
+                return date.toLocaleDateString('zh-CN', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit'
+                }).replace(/\//g, '-');
+              }
+            }
+            
+            /**
+             * 辅助函数：将Date对象格式化为YYYY-MM-DD字符串
+             * @param {Date|string} date - 日期对象或日期字符串
+             * @returns {string} 格式化后的日期字符串
+             */
+            function formatDate(date) {
+              // 处理空值
+              if (!date) return '';
+              
+              // 如果是字符串，尝试转换为Date对象
+              if (typeof date === 'string') {
+                // 处理常见的日期字符串格式
+                if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                  // 已经是YYYY-MM-DD格式，直接返回
+                  return date;
+                }
+                
+                // 尝试解析其他格式的日期字符串
+                const parsedDate = new Date(date);
+                if (!isNaN(parsedDate.getTime())) {
+                  date = parsedDate;
+                } else {
+                  console.warn('无法解析的日期字符串:', date);
+                  return '';
+                }
+              }
+              
+              // 确保是Date对象
+              if (!(date instanceof Date)) {
+                console.warn('formatDate参数不是有效的Date对象:', date);
+                return '';
+              }
+              
+              // 格式化日期
+              const year = date.getFullYear();
+              const month = String(date.getMonth() + 1).padStart(2, '0'); // 月份从0开始，需+1
+              const day = String(date.getDate()).padStart(2, '0');
+              
+              return `${year}-${month}-${day}`;
+            }
+            
+            // 绑定勾选框事件
+            function bindCheckboxEvents() {
+              const checkAll = domUtils.getElement('checkAll');
+              if (checkAll) {
+                // 全选/取消全选
+                checkAll.addEventListener('change', function(e) {
+                  const isChecked = e.target.checked;
+                  // 选中当前页所有行的复选框
+                  document.querySelectorAll('#wuliuTableBody input[type="checkbox"].row-checkbox').forEach(checkbox => {
+                    checkbox.checked = isChecked;
+                  });
+                  console.log(`全选状态变更为: ${isChecked}`);
+                });
+              }
+            }
+            
+            // 绑定批量更新按钮事件
+            function bindBatchUpdateEvent() {
+              const batchBtn = domUtils.getElement('batchUpdateBtn');
+              if (batchBtn) {
+                batchBtn.addEventListener('click', async function() {
+                  // 收集所有选中的ID，并过滤掉空值
+                  const checkedIds = Array.from(
+                    document.querySelectorAll('#wuliuTableBody input[type="checkbox"].row-checkbox:checked')
+                  )
+                    .map(checkbox => checkbox.value.trim())
+                    .filter(id => id);
+
+                  // 验证是否有有效选中数据
+                  if (checkedIds.length === 0) {
+                    alert('请选择有效的数据（ID不能为空）');
+                    return;
+                  }
+
+                  // 二次确认
+                  if (!confirm(`确定要更新选中的 ${checkedIds.length} 条数据吗？`)) {
+                    return;
+                  }
+
+                  // 显示加载状态
+                  this.disabled = true;
+                  this.classList.add('btn-loading');
+                  this.textContent = '更新中...';
+
+                  try {
+                    console.log(`开始批量更新选中的 ${checkedIds.length} 条数据，ID:`, checkedIds);
+                    // 调用后端接口
+                    const response = await fetch('/upwuliuu', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        conditions: {
+                          id: checkedIds
+                        },
+                        concurrency: 100
+                      })
+                    });
+
+                    // 增强的响应验证
+                    if (!response.ok) {
+                      const errorText = await response.text();
+                      throw new Error(`HTTP错误 ${response.status}: ${errorText.substring(0, 200)}`);
+                    }
+
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                      const responseText = await response.text();
+                      throw new Error(`期望JSON响应，但得到: ${contentType || '未知类型'}. 内容: ${responseText.substring(0, 200)}`);
+                    }
+
+                    const result = await response.json();
+                    console.log('批量更新接口响应:', result);
+
+                    if (result.success) {
+                      alert(`批量更新完成！成功: ${result.total} 条, 失败: ${result.failed} 条, 跳过: ${result.skipped} 条`);
+                      fetchWuliuData();
+                    } else {
+                      alert(`批量更新失败: ${result.error || '未知错误'}`);
+                    }
+                  } catch (error) {
+                    console.error('批量更新出错:', error);
+                    alert(`批量更新过程中发生错误: ${error.message}`);
+                  } finally {
+                    // 恢复按钮状态
+                    this.disabled = false;
+                    this.classList.remove('btn-loading');
+                    this.textContent = '批量更新选中数据';
+                  }
+                });
+              }
+            }
+          })(); // 立即执行函数结束，作用域隔离完成
+        }
+        
+        return { outboundDateRange, onlineDateRange, deliveryDateRange };
+      }
+    })
+    // 使用中文语言包
+    .use(ElementPlus, { locale: ElementPlusLocaleZhCn })
+    .mount('#app');
+  </script>
+</body>
+</html>

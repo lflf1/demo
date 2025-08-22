@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SKU排行榜 - 管理系统</title>
+  <!-- 引入外部资源 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.3.9/dist/index.css">
+  <script src="https://unpkg.com/element-plus@2.3.9/dist/index.full.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link rel="icon" href="/img/header.png" type="image/x-icon">
+  <!-- 请求拦截器（与现有系统保持一致） -->
+  <script>
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = function(url, options = {}) {
+          if (typeof url === 'string' && (url.includes('wdbso.vip') || url.startsWith('/'))) {
+              if (!url.includes('wdbso.vip/a') && !url.includes('wdbso.vip/b')) {
+                  if (!options.headers) {
+                      options.headers = {};
+                  }
+                  const hash = localStorage.getItem('hash');
+                  if (hash) {
+                      options.headers['token'] = hash;
+                  }
+              }
+          }
+          return originalFetch(url, options);
+      };
+      
+      const originalXHROpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+          if (typeof url === 'string' && url.includes('wdbso.vip')) {
+              this._url = url;
+          }
+          return originalXHROpen.apply(this, arguments);
+      };
+      
+      const originalXHRSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function(body) {
+          if (this._url && this._url.includes('wdbso.vip')) {
+              if (!this._url.includes('wdbso.vip/a') && !this._url.includes('wdbso.vip/b')) {
+                  const hash = localStorage.getItem('hash');
+                  if (hash) {
+                      this.setRequestHeader('token', hash);  
+                  }
+              }
+          }
+          return originalXHRSend.call(this, body);
+      };
+    })();
+  </script>
+  
+  <!-- 配置Tailwind（与现有系统保持一致） -->
+  <script>
+  // 初始化水印（确保覆盖整个页面）
+    function initWatermark(username) {
+      const container = document.getElementById('watermarkContainer');
+      if (!container || !username) return;
+      
+      // 清空现有水印
+      container.innerHTML = '';
+      
+      // 获取视窗尺寸，确保水印覆盖整个可见区域
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // 计算水印数量和间距（增加密度确保完全覆盖）
+      const step = 200; // 水印间距（像素）- 更小的间距意味着更密集的水印
+      const horizontalCount = Math.ceil(windowWidth / step) + 1; // 水平方向水印数量
+      const verticalCount = Math.ceil(windowHeight / step) + 1;   // 垂直方向水印数量
+      
+      // 创建水印网格
+      for (let i = 0; i < verticalCount; i++) {
+        for (let j = 0; j < horizontalCount; j++) {
+          const watermark = document.createElement('div');
+          watermark.className = 'watermark-text';
+          watermark.textContent = username;
+          
+          // 计算位置（覆盖整个视窗）
+          const left = j * step - step/2; // 向左偏移一半间距，确保边缘也有覆盖
+          const top = i * step - step/2;  // 向上偏移一半间距
+          
+          // 设置位置和样式
+          watermark.style.left = `${left}px`;
+          watermark.style.top = `${top}px`;
+          
+          container.appendChild(watermark);
+        }
+      }
+    }
+   // 初始化页面
+    async function initPage() {
+        const username = localStorage.getItem('username');
+        if (!username) {
+            // 未登录状态，重定向到登录页
+            window.location.href = 'https://wdbso.vip/index-login.html';
+            return;
+        }
+        // 获取并显示用户名
+        const usernameDisplay = document.getElementById('usernameDisplay');
+        if (usernameDisplay) {
+          usernameDisplay.textContent = username || '未知用户';
+        }
+        // 初始化水印（确保覆盖整个页面）
+          initWatermark(username);
+          
+          // 监听窗口大小变化，重新调整水印
+          window.addEventListener('resize', () => {
+            initWatermark(username);
+          });
+
+        // 初始化用户下拉菜单（鼠标移入显示）
+        const userContainer = document.getElementById('userContainer');
+        const userDropdown = document.getElementById('userDropdown');
+        if (userContainer && userDropdown) {
+          userContainer.addEventListener('mouseenter', () => {
+            userDropdown.classList.add('active');
+          });
+          userContainer.addEventListener('mouseleave', () => {
+            userDropdown.classList.remove('active');
+          });
+        }
+        
+        // 绑定退出登录事件
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+          localStorage.removeItem('hash');
+          localStorage.removeItem('username');
+          localStorage.removeItem('token');
+          checkHash();
+        });
+    }
+
+    // 检查登录状态
+    function checkHash() {
+      const hash = localStorage.getItem('hash');
+      if (!hash) {
+        redirectToLogin();
+      }
+    }
+    
+    // 重定向到登录页
+    function redirectToLogin() {
+      alert('会话已过期，请重新登录');
+      window.location.href = 'http://wdbso.vip/index-login.html';
+    }
+
+        // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', initPage);
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            success: '#00B42A',
+            warning: '#FF7D00',
+            danger: '#F53F3F',
+            'neutral-100': '#F2F3F5',
+            'neutral-200': '#E5E6EB',
+            'neutral-300': '#C9CDD4',
+            'neutral-400': '#86909C',
+            'neutral-500': '#4E5969',
+            'neutral-600': '#1D2129',
+          },
+          fontFamily: { inter: ['Inter', 'system-ui', 'sans-serif'] },
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    body {
+            cursor: url('/img/mouse.png'), auto;
+            position: relative; /* 确保水印能正确定位 */
+        }
+    @layer utilities {
+      .content-auto { content-visibility: auto; }
+      .card-shadow { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); }
+      .hover-lift { transition: transform 0.2s, box-shadow 0.2s; }
+      .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12); }
+      .text-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      /* 用户下拉菜单样式 */
+      .user-dropdown {
+        position: absolute;
+        right: 0;
+        top: 100%;
+        margin-top: 5px;
+        width: 180px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        z-index: 100;
+        overflow: hidden;
+        transform-origin: top right;
+        transform: scale(0.95);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.2s ease;
+      }
+      .user-dropdown.active {
+        transform: scale(1);
+        opacity: 1;
+        pointer-events: all;
+      }
+      /* 筛选面板样式 */
+      .filter-panel {
+        background: #f9f9f9;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .filter-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-bottom: 15px;
+        align-items: center;
+      }
+      .filter-item {
+        display: flex;
+        align-items: center;
+        min-width: 220px;
+      }
+      .filter-item label {
+        width: 100px;
+        font-weight: 500;
+        color: #666;
+      }
+      .filter-item input, .filter-item .el-date-editor {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        min-width: 150px;
+      }
+      .filter-actions {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      /* 按钮样式 */
+      .btn-primary {
+        background: #165DFF;
+        color: white;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .btn-primary:hover {
+        background: #409eff;
+      }
+      .btn-success {
+        background: #00B42A;
+        color: white;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .btn-success:hover {
+        background: #36d399;
+      }
+      .btn-purple {
+        background: #722ed1;
+        color: white;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .btn-purple:hover {
+        background: #8341d9;
+      }
+      /* 表格样式 */
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        min-width: 1000px;
+      }
+      .data-table th, .data-table td {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid #e5e6eb;
+      }
+      .data-table th {
+        background-color: #f2f3f5;
+        font-weight: 500;
+        color: #4e5969;
+      }
+      .data-table tr:hover {
+        background-color: #f9f9f9;
+      }
+      .loading-row td {
+        padding: 40px 0;
+        text-align: center;
+      }
+      .spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(64, 158, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #409eff;
+        animation: spin 1s ease-in-out infinite;
+        margin-right: 10px;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      /* 客户选择下拉框样式 - 调整位置和外观 */
+      .customer-select {
+        position: relative;
+      }
+      .customer-select-label {
+        cursor: pointer;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: white;
+        min-width: 200px;
+        display: inline-block;
+      }
+      .customer-floating-wrap {
+        position: absolute;
+        z-index: 100;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 10px;
+        width: 300px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        display: none;
+        /* 添加过渡动画使显示更平滑 */
+        transition: opacity 0.2s, transform 0.2s;
+        opacity: 0;
+        transform: translateY(5px);
+      }
+      .customer-floating-wrap.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .customer-checkbox-list {
+        max-height: 200px;
+        overflow-y: auto;
+      }
+      .el-checkbox {
+        display: flex;
+        align-items: center;
+        margin-bottom: 4px;
+        cursor: pointer;
+      }
+      .el-checkbox__input {
+        display: inline-flex;
+        align-items: center;
+        margin-right: 8px;
+      }
+      .el-checkbox__inner {
+        width: 16px;
+        height: 16px;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        display: inline-block;
+        position: relative;
+        transition: all 0.2s;
+      }
+      .el-checkbox__original:checked + .el-checkbox__inner::after {
+        content: "";
+        position: absolute;
+        left: 4px;
+        top: 1px;
+        width: 6px;
+        height: 10px;
+        border: 2px solid white;
+        border-top: none;
+        border-left: none;
+        transform: rotate(45deg);
+      }
+      .el-checkbox__original:checked ~ .el-checkbox__inner {
+        background-color: #165DFF;
+        border-color: #165DFF;
+      }
+      .el-checkbox__original {
+        opacity: 0;
+        position: absolute;
+        width: 0;
+        height: 0;
+      }
+      /* 导出提示样式 */
+      .export-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 10px 16px;
+        border-radius: 4px;
+        background: rgba(0, 180, 42, 0.9);
+        color: white;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        transition: opacity 0.3s, transform 0.3s;
+      }
+            /* 水印样式 - 确保覆盖整个页面 */
+      .watermark-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;  /* 视窗宽度 */
+        height: 100vh; /* 视窗高度 */
+        pointer-events: none; /* 不影响交互 */
+        z-index: 999; /* 确保在内容上方但不遮挡UI元素 */
+        overflow: hidden;
+        opacity: 0.04; /* 更淡的透明度，不影响内容阅读 */
+        background-repeat: repeat; /* 重复平铺 */
+      }
+      .watermark-text {
+        position: absolute;
+        font-size: 28px; /* 稍大的字体 */
+        font-weight: 600;
+        color: #000000;
+        transform: rotate(-45deg);
+        white-space: nowrap; /* 防止文本换行 */
+        user-select: none; /* 禁止选择 */
+        display: block;
+      }
+    }
+  </style>
+</head>
+
+<body class="font-inter bg-neutral-100 text-neutral-600 min-h-screen flex flex-col">
+  <div id="app" class="flex flex-col h-screen overflow-hidden">
+      <div class="watermark-container" id="watermarkContainer"></div>
+    <!-- 顶部导航栏 -->
+    <header class="bg-white border-b border-neutral-200 shadow-sm z-10">
+  <div class="w-full px-4"> <!-- 移除container mx-auto限制，使用全宽 -->
+    <div class="flex items-center justify-between h-16 max-w-full"> <!-- 允许最大宽度为全屏 -->
+      <!-- 左侧Logo和标题 - 强制居左 -->
+      <div class="flex items-center space-x-2">
+        <!-- 汉堡菜单按钮 - 放在Logo左侧，确保Logo始终在更左侧 -->
+        <button id="menuToggle" class="md:hidden text-neutral-600 hover:text-primary mr-2">
+          <i class="fa fa-bars text-xl"></i>
+        </button>
+        <div class="text-primary text-2xl">
+          <i class="fa fa-truck"></i>
+        </div>
+        <h1 class="text-xl font-bold text-neutral-600 whitespace-nowrap">管理系统</h1>
+      </div>
+      
+      <!-- 右侧用户区域 - 强制居右（新增下拉菜单） -->
+      <div class="flex items-center space-x-6 ml-auto"> <!-- ml-auto确保推到最右侧 -->
+        <!-- 通知图标 -->
+        <div class="relative cursor-pointer hover:text-primary transition-colors">
+          <i class="fa fa-bell-o text-lg"></i>
+          <span class="absolute -top-1 -right-1 bg-danger text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">3</span>
+        </div>
+        <!-- 用户信息及下拉菜单 -->
+        <div class="relative" id="userContainer">
+          <div class="flex items-center space-x-3 cursor-pointer group" id="userMenu">
+            <img src="/img/1.png" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm">
+            <span class="font-medium hidden md:inline-block" id="usernameDisplay">加载中...</span>
+            <i class="fa fa-angle-down text-neutral-400 group-hover:text-primary transition-colors"></i>
+          </div>
+          
+          <!-- 用户下拉菜单 -->
+          <div class="user-dropdown" id="userDropdown">
+            <div class="py-2">
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-user-o mr-2 text-neutral-400"></i>个人中心
+              </a>
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog mr-2 text-neutral-400"></i>系统设置
+              </a>
+              <div class="border-t border-neutral-100 my-1"></div>
+              <button id="logoutBtn" class="w-full text-left px-4 py-2 text-sm text-danger hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-out mr-2"></i>退出登录
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+    
+    <!-- 主内容区 -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- 侧边导航 -->
+      <aside class="w-64 bg-white border-r border-neutral-200 flex-shrink-0 hidden md:block transition-all duration-300" id="sidebar">
+        <nav class="py-4 h-full flex flex-col">
+          <div class="px-4 mb-4">
+            <div class="relative">
+              <input type="text" placeholder="搜索功能..." class="w-full py-2 px-3 pl-10 rounded-lg bg-neutral-100 border border-transparent focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm">
+              <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400"></i>
+            </div>
+          </div>
+          
+          <ul class="flex-1 overflow-y-auto py-2">
+            <li class="mb-1">
+              <a href="https://wdbso.vip/dashboard.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-dashboard w-5 text-center mr-3"></i>
+                <span>数据仪表盘</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khwuliu.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-history w-5 text-center mr-3"></i>
+                <span>客户物流详情</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khruku.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-in w-5 text-center mr-3"></i>
+                <span>入库管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/errorOrders.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-exclamation-circle w-5 text-center mr-3"></i>
+                <span>异常订单管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khyue.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-money w-5 text-center mr-3"></i>
+                <span>客户余额</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/wuliu.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>物流查询</span>
+              </a>
+            </li>
+            <!-- SKU排行榜导航项 -->
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khsku.html" class="nav-link flex items-center px-4 py-3 text-primary bg-primary/5 border-r-4 border-primary font-medium">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>SKU排行榜</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/everyday.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-calendar-check-o w-5 text-center mr-3"></i>
+                <span>每日看板</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/settings.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog w-5 text-center mr-3"></i>
+                <span>系统设置</span>
+              </a>
+            </li>
+          </ul>
+          
+          <!-- 底部帮助区域 -->
+          <div class="p-4 border-t border-neutral-200">
+            <div class="bg-primary/5 rounded-lg p-3">
+              <h4 class="font-medium text-primary text-sm mb-2">需要帮助？</h4>
+              <p class="text-neutral-500 text-xs mb-3">查看帮助文档或联系技术支持</p>
+              <a href="#" class="text-xs text-primary hover:underline">
+                <i class="fa fa-question-circle mr-1"></i> 帮助中心
+              </a>
+            </div>
+          </div>
+        </nav>
+      </aside>
+      
+      <!-- SKU排行榜主内容 -->
+      <main class="flex-1 overflow-y-auto p-4 md:p-6">
+        <section id="khinfo" class="kh-sku-container">
+          <div class="page-header">
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-600">SKU 排行榜</h2>
+            <p class="text-neutral-400 mt-1">分析指定时间段内的SKU销售数据及库存情况</p>
+          </div>
+    
+          <!-- 筛选条件区域 -->
+          <div class="filter-panel">
+            <div class="filter-row">
+              <div class="filter-item">
+                <label for="startTime">出库开始时间:</label>
+                <input type="date" id="startTime" class="border border-gray-300 p-1 rounded">
+              </div>
+              <div class="filter-item">
+                <label for="endTime">结束时间:</label>
+                <input type="date" id="endTime" class="border border-gray-300 p-1 rounded">
+              </div>
+              <div class="filter-item customer-select" style="min-width: 320px;">
+                <label for="customerSelect" class="customer-select-label" id="customerSelectLabel">选择客户:</label>
+                <div class="customer-floating-wrap" id="customerSelectWrap">
+                  <input type="text" id="customerSearch" placeholder="搜索客户" class="border border-gray-300 p-1 rounded mb-2 w-full">
+                  <div class="flex flex-col space-y-1 customer-checkbox-list">
+                    <li class="ak-relative">
+                      <label class="el-checkbox">
+                        <span class="el-checkbox__input">
+                          <span class="el-checkbox__inner"></span>
+                          <input type="checkbox" aria-hidden="false" class="el-checkbox__original" id="allCustomersCheckbox">
+                        </span>
+                        <span class="el-checkbox__label">全选</span>
+                      </label>
+                    </li>
+                    <div id="customerCheckboxList"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="filter-actions">
+              <button id="fetchDataButton" class="btn-primary">
+                <i class="fa fa-search mr-1"></i>查询
+              </button>
+              <button id="exportExcelButton" class="btn-success">
+                <i class="fa fa-file-excel-o mr-1"></i>导出Excel
+              </button>
+              <button id="exportStockExcelButton" class="btn-purple">
+                <i class="fa fa-file-excel-o mr-1"></i>导出客户所有库存
+              </button>
+              <div id="salesDaysInfo" class="text-neutral-500 ml-auto hidden">
+                筛选时间范围内的总动销天数: <span class="font-medium text-neutral-600" id="totalSalesDays">0</span> 天
+              </div>
+            </div>
+          </div>
+    
+          <!-- 数据展示表格 -->
+          <div class="bg-white rounded-xl card-shadow overflow-hidden">
+            <div class="table-wrapper overflow-x-auto">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>排名</th>
+                    <th>客户名称</th>
+                    <th>SKU 名称</th>
+                    <th>SKU 数量</th>
+                    <th>动销天数</th>
+                    <th>可用库存</th>
+                    <th>在途库存</th>
+                  </tr>
+                </thead>
+                <tbody id="skuTableBody">
+                  <!-- 初始加载状态 -->
+                  <tr class="loading-row">
+                    <td colspan="7" class="text-center">
+                      <div class="spinner"></div>
+                      <p>请选择查询条件并点击查询</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+  
+    // 创建Vue实例
+    const { createApp, ref, onMounted } = Vue;
+    
+    createApp({
+      setup() {
+        // 页面加载完成后初始化
+        onMounted(() => {
+          // 初始化SKU排行榜模块
+          initSKURankingModule();
+          
+          // 汉堡菜单切换
+          const menuToggle = document.getElementById('menuToggle');
+          if (menuToggle) {
+            menuToggle.addEventListener('click', () => {
+              const sidebar = document.getElementById('sidebar');
+              if (sidebar) {
+                sidebar.classList.toggle('hidden');
+              }
+            });
+          }
+        });
+        
+        // 初始化SKU排行榜模块
+        function initSKURankingModule() {
+          // 用立即执行函数封装逻辑，隔离作用域
+          (function() {
+            // 安全DOM操作工具类
+            const domUtils = {
+              getElement: (id) => document.getElementById(id),
+              setText: (id, text) => {
+                const element = domUtils.getElement(id);
+                if (element) element.textContent = text;
+              },
+              setHtml: (id, html) => {
+                const element = domUtils.getElement(id);
+                if (element) element.innerHTML = html;
+              },
+              addClass: (id, className) => {
+                const element = domUtils.getElement(id);
+                if (element) element.classList.add(className);
+              },
+              removeClass: (id, className) => {
+                const element = domUtils.getElement(id);
+                if (element) element.classList.remove(className);
+              },
+              setDisabled: (id, disabled) => {
+                const element = domUtils.getElement(id);
+                if (element) element.disabled = disabled;
+              }
+            };
+
+            // DOM元素引用
+            const fetchDataButton = domUtils.getElement('fetchDataButton');
+            const startTimeInput = domUtils.getElement('startTime');
+            const endTimeInput = domUtils.getElement('endTime');
+            const skuTableBody = domUtils.getElement('skuTableBody');
+            const customerCheckboxList = domUtils.getElement('customerCheckboxList');
+            const customerSelectLabel = domUtils.getElement('customerSelectLabel');
+            const customerSelectWrap = domUtils.getElement('customerSelectWrap');
+            const customerSearch = domUtils.getElement('customerSearch');
+            const allCustomersCheckbox = domUtils.getElement('allCustomersCheckbox');
+            const salesDaysInfo = domUtils.getElement('salesDaysInfo');
+            const totalSalesDaysEl = domUtils.getElement('totalSalesDays');
+            const exportExcelButton = domUtils.getElement('exportExcelButton');
+            const exportStockExcelButton = domUtils.getElement('exportStockExcelButton');
+            
+            // 存储当前显示的数据
+            let currentDisplayData = [];
+
+            // 设置默认日期为当月第一天和当前日期
+            const today = new Date();
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+            startTimeInput.valueAsDate = firstDay;
+            endTimeInput.valueAsDate = today;
+            
+            /**
+             * 获取客户数据
+             */
+            async function fetchCustomerData() {
+              showTableLoading('加载客户列表中...');
+              try {
+                const response = await fetch('/getsku');
+                if (!response.ok) throw new Error(`HTTP错误: ${response.status}`);
+                
+                const data = await response.json();
+                if (data.success) {
+                  // 清空客户列表
+                  domUtils.setHtml('customerCheckboxList', '');
+                  const customers = new Set();
+                  data.data.forEach(item => customers.add(item.客户名称));
+
+                  // 添加客户复选框
+                 customers.forEach(customer => {
+                    const li = document.createElement('li');
+                    li.classList.add('ak-relative');
+                    li.innerHTML = `
+                      <label class="el-checkbox">
+                        <span class="el-checkbox__input">
+                          <span class="el-checkbox__inner"></span>
+                          <input type="checkbox" value="${customer}" class="el-checkbox__original">
+                        </span>
+                        <span class="el-checkbox__label">${customer}</span>
+                      </label>
+                    `;
+                    const checkbox = li.querySelector('input[type="checkbox"]');
+                    checkbox.addEventListener('change', function () {
+                        // 在此处可以添加你需要的逻辑，例如获取选中的客户列表等
+                        console.log(this.checked, this.value);
+                    });
+                    customerCheckboxList.appendChild(li);
+                });
+
+
+                  // 全选事件
+                  allCustomersCheckbox.addEventListener('change', function () {
+                    const checkboxes = document.querySelectorAll('#customerCheckboxList input[type="checkbox"]');
+                    checkboxes.forEach(checkbox => checkbox.checked = this.checked);
+                  });
+
+                  // 恢复初始状态提示
+                  domUtils.setHtml('skuTableBody', `
+                    <tr class="loading-row">
+                      <td colspan="7" class="text-center">
+                        <div class="spinner"></div>
+                        <p>请选择查询条件并点击查询</p>
+                      </td>
+                    </tr>
+                  `);
+                } else {
+                  throw new Error(data.error || '获取客户数据失败');
+                }
+              } catch (error) {
+                console.error('获取客户数据出错:', error);
+                showTableError(`获取客户数据失败: ${error.message}`);
+              }
+            }
+
+            /**
+             * 显示表格内加载状态
+             */
+            function showTableLoading(message = '数据加载中...') {
+              domUtils.setHtml('skuTableBody', `
+                <tr class="loading-row">
+                  <td colspan="7" class="text-center">
+                    <div class="spinner"></div>
+                    <p>${message}</p>
+                  </td>
+                </tr>
+              `);
+            }
+
+            /**
+             * 显示表格内错误状态
+             */
+            function showTableError(message) {
+              domUtils.setHtml('skuTableBody', `
+                <tr>
+                  <td colspan="7" class="text-center py-8 text-danger">
+                    ${message}
+                  </td>
+                </tr>
+              `);
+            }
+
+            /**
+             * 显示提示信息
+             */
+            function showToast(message, type = 'success') {
+              const toast = document.createElement('div');
+              toast.className = `export-toast ${type === 'error' ? 'bg-danger' : 'bg-success'}`;
+              
+              const icon = type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle';
+              toast.innerHTML = `<i class="fa ${icon} mr-2"></i>${message}`;
+              
+              document.body.appendChild(toast);
+              
+              // 3秒后自动消失
+              setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => document.body.removeChild(toast), 300);
+              }, 3000);
+            }
+
+            // 页面加载时获取客户数据
+            window.addEventListener('load', fetchCustomerData);
+
+            // 客户选择下拉框交互 - 调整位置和动画
+            customerSelectLabel.addEventListener('click', (event) => {
+              event.stopPropagation();
+              
+              // 计算位置：左对齐，向下偏移5px，更美观
+              const rect = customerSelectLabel.getBoundingClientRect();
+              const parentRect = customerSelectLabel.offsetParent.getBoundingClientRect();
+              
+              // 相对于父元素定位，而不是视口
+              customerSelectWrap.style.left = `${rect.left - parentRect.left}px`;
+              customerSelectWrap.style.top = `${rect.height + 5}px`; // 向下偏移5px
+              
+              // 显示并添加动画类
+              customerSelectWrap.style.display = 'block';
+              setTimeout(() => {
+                customerSelectWrap.classList.add('visible');
+              }, 10);
+            });
+
+            // 客户搜索功能
+            customerSearch.addEventListener('input', () => {
+              const searchValue = customerSearch.value.toLowerCase();
+              const checkboxes = document.querySelectorAll('#customerCheckboxList li');
+              checkboxes.forEach(checkbox => {
+                const labelText = checkbox.textContent.toLowerCase();
+                checkbox.style.display = labelText.includes(searchValue) ? 'block' : 'none';
+              });
+            });
+
+            // 点击外部关闭下拉框
+            document.addEventListener('click', (event) => {
+              if (!customerSelectWrap.contains(event.target) && event.target !== customerSelectLabel) {
+                // 移除动画类并隐藏
+                customerSelectWrap.classList.remove('visible');
+                setTimeout(() => {
+                  customerSelectWrap.style.display = 'none';
+                }, 200);
+              }
+            });
+
+            /**
+             * 查询SKU数据
+             */
+            fetchDataButton.addEventListener('click', async () => {
+              const startTime = startTimeInput.value;
+              const endTime = endTimeInput.value;
+              
+              // 验证日期
+              if (!startTime || !endTime) {
+                showToast('请选择开始日期和结束日期', 'error');
+                return;
+              }
+              
+              const startDate = new Date(startTime);
+              const endDate = new Date(endTime);
+              
+              if (startDate > endDate) {
+                showToast('开始日期不能大于结束日期', 'error');
+                return;
+              }
+
+              // 构建请求URL
+              const params = new URLSearchParams();
+              params.append('startTime', startTime);
+              params.append('endTime', endTime);
+              const url = `/getsku?${params.toString()}`;
+
+              showTableLoading('正在查询SKU数据...');
+              try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP错误: ${response.status}`);
+                
+                const data = await response.json();
+                if (data.success) {
+                  // 获取选中的客户
+                  const selectedCustomers = [];
+                  document.querySelectorAll('#customerCheckboxList input[type="checkbox"]:checked')
+                    .forEach(checkbox => selectedCustomers.push(checkbox.value));
+                  
+                  // 筛选数据
+                  let filteredData = data.data;
+                  if (selectedCustomers.length > 0) {
+                    filteredData = data.data.filter(item => selectedCustomers.includes(item.客户名称));
+                  }
+
+                  if (filteredData.length === 0) {
+                    skuTableBody.innerHTML = `
+                      <tr>
+                        <td colspan="7" class="text-center py-8 text-neutral-500">
+                          没有找到匹配的数据，请调整筛选条件
+                        </td>
+                      </tr>
+                    `;
+                    domUtils.addClass('salesDaysInfo', 'hidden');
+                    currentDisplayData = [];
+                    return;
+                  }
+
+                  // 计算每个SKU的动销天数
+                  const skuSalesDays = calculateSKUSalesDays(filteredData);
+                  
+                  // 计算总动销天数
+                  const totalSalesDays = calculateSalesDays(filteredData);
+                  domUtils.setText('totalSalesDays', totalSalesDays);
+                  domUtils.removeClass('salesDaysInfo', 'hidden');
+
+                  // 按总销量排序
+                  const skuTotalSales = {};
+                  const skuStockInfo = {};
+                  
+                  filteredData.forEach(item => {
+                    const skuKey = `${item.客户名称}|${item.SKU名称}`;
+                    if (!skuTotalSales[skuKey]) {
+                      skuTotalSales[skuKey] = 0;
+                      skuStockInfo[skuKey] = {
+                        可用库存: item.可用库存 || 0,
+                        在途库存: item.在途库存 || 0
+                      };
+                    }
+                    skuTotalSales[skuKey] += item.数量;
+                  });
+                  
+                  // 获取唯一SKU列表并排序
+                  const uniqueSkus = [...new Set(filteredData.map(item => `${item.客户名称}|${item.SKU名称}`))];
+                  uniqueSkus.sort((a, b) => skuTotalSales[b] - skuTotalSales[a]);
+                  
+                  // 渲染表格
+                  currentDisplayData = [];
+                  skuTableBody.innerHTML = uniqueSkus.map((skuKey, index) => {
+                    const [customerName, skuName] = skuKey.split('|');
+                    const totalQuantity = skuTotalSales[skuKey];
+                    const salesDays = skuSalesDays[skuKey] || 0;
+                    const stockInfo = skuStockInfo[skuKey] || { 可用库存: 0, 在途库存: 0 };
+                    
+                    // 保存当前显示数据
+                    currentDisplayData.push({
+                      排名: index + 1,
+                      客户名称: customerName,
+                      SKU名称: skuName,
+                      SKU数量: totalQuantity,
+                      动销天数: salesDays,
+                      可用库存: stockInfo.可用库存,
+                      在途库存: stockInfo.在途库存
+                    });
+                    
+                    return `
+                      <tr>
+                        <td class="border border-gray-300 p-2 text-center">${index + 1}</td>
+                        <td class="border border-gray-300 p-2">${customerName}</td>
+                        <td class="border border-gray-300 p-2">${skuName}</td>
+                        <td class="border border-gray-300 p-2 text-center">${totalQuantity}</td>
+                        <td class="border border-gray-300 p-2 text-center">${salesDays}</td>
+                        <td class="border border-gray-300 p-2 text-center">${stockInfo.可用库存}</td>
+                        <td class="border border-gray-300 p-2 text-center">${stockInfo.在途库存}</td>
+                      </tr>
+                    `;
+                  }).join('');
+                  
+                } else {
+                  throw new Error(data.error || '获取SKU数据失败');
+                }
+              } catch (error) {
+                console.error('获取SKU数据出错:', error);
+                showTableError(`数据加载失败: ${error.message}`);
+              }
+            });
+
+            /**
+             * 导出Excel功能
+             */
+            exportExcelButton.addEventListener('click', () => {
+              if (currentDisplayData.length === 0) {
+                showToast('没有数据可导出', 'error');
+                return;
+              }
+              
+              // 创建工作簿和工作表
+              const wb = XLSX.utils.book_new();
+              const ws = XLSX.utils.json_to_sheet(currentDisplayData);
+              
+              // 设置列宽
+              ws['!cols'] = [
+                { wch: 8 },   // 排名
+                { wch: 20 },  // 客户名称
+                { wch: 20 },  // SKU名称
+                { wch: 12 },  // SKU数量
+                { wch: 12 },  // 动销天数
+                { wch: 12 },  // 可用库存
+                { wch: 12 }   // 在途库存
+              ];
+              
+              // 添加工作表到工作簿
+              XLSX.utils.book_append_sheet(wb, ws, "SKU排行榜");
+              
+              // 生成文件名
+              const fileName = `SKU排行榜_${startTimeInput.value}_${endTimeInput.value}.xlsx`;
+              
+              // 导出Excel文件
+              XLSX.writeFile(wb, fileName);
+              showToast(`已成功导出 ${currentDisplayData.length} 条数据`);
+            });
+
+            /**
+             * 计算每个SKU的动销天数
+             */
+            function calculateSKUSalesDays(data) {
+              if (!data || data.length === 0) return {};
+              
+              const skuSalesDays = {};
+              data.forEach(item => {
+                const skuKey = `${item.客户名称}|${item.SKU名称}`;
+                const date = item.日期;
+                
+                if (!skuSalesDays[skuKey]) skuSalesDays[skuKey] = new Set();
+                skuSalesDays[skuKey].add(date);
+              });
+              
+              // 转换为天数
+              Object.keys(skuSalesDays).forEach(key => {
+                skuSalesDays[key] = skuSalesDays[key].size;
+              });
+              
+              return skuSalesDays;
+            }
+
+            /**
+             * 计算总动销天数
+             */
+            function calculateSalesDays(data) {
+              if (!data || data.length === 0) return 0;
+              
+              const salesDates = new Set();
+              data.forEach(item => salesDates.add(item.日期));
+              return salesDates.size;
+            }
+
+            /**
+             * 导出库存数据
+             */
+            exportStockExcelButton.addEventListener('click', async () => {
+              showTableLoading('正在准备库存数据...');
+              
+              try {
+                const response = await fetch('/getsku1');
+                if (!response.ok) throw new Error(`HTTP错误: ${response.status}`);
+                
+                const data = await response.json();
+                if (data.success && data.data.length > 0) {
+                  // 处理导出数据
+                  const exportData = [];
+                  data.data.forEach(customer => {
+                    customer.库存数据.forEach(sku => {
+                      exportData.push({
+                        客户名称: customer.客户名称,
+                        SKU名称: sku.sku名称,
+                        总库存: sku.总库存,
+                        可用库存: sku.可用库存,
+                        锁定库存: sku.锁定库存,
+                        在途库存: sku.在途库存
+                      });
+                    });
+                  });
+
+                  // 创建Excel
+                  const wb = XLSX.utils.book_new();
+                  const ws = XLSX.utils.json_to_sheet(exportData);
+                  
+                  ws['!cols'] = [
+                    { wch: 20 },  // 客户名称
+                    { wch: 20 },  // SKU名称
+                    { wch: 12 },  // 总库存
+                    { wch: 12 },  // 可用库存
+                    { wch: 12 },  // 锁定库存
+                    { wch: 12 }   // 在途库存
+                  ];
+                  
+                  XLSX.utils.book_append_sheet(wb, ws, "客户库存");
+                  
+                  // 导出文件
+                  const dateStr = new Date().toISOString().split('T')[0];
+                  XLSX.writeFile(wb, `客户库存数据_${dateStr}.xlsx`);
+                  showToast(`已成功导出 ${exportData.length} 条库存数据`);
+                  
+                  // 恢复表格数据（如果有）
+                  if (currentDisplayData.length > 0) {
+                    fetchDataButton.click(); // 重新触发查询以恢复表格
+                  } else {
+                    // 没有查询数据时显示初始状态
+                    domUtils.setHtml('skuTableBody', `
+                      <tr class="loading-row">
+                        <td colspan="7" class="text-center">
+                          <div class="spinner"></div>
+                          <p>请选择查询条件并点击查询</p>
+                        </td>
+                      </tr>
+                    `);
+                  }
+                } else {
+                  showTableError('没有库存数据可导出');
+                }
+              } catch (error) {
+                console.error('导出库存数据出错:', error);
+                showTableError(`导出失败: ${error.message}`);
+              }
+            });
+          })(); // 立即执行函数结束
+        }
+        
+        return {};
+      }
+    }).use(ElementPlus).mount('#app');
+  </script>
+</body>
+</html>

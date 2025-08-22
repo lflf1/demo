@@ -1,0 +1,2277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>每日看板 - 管理系统</title>
+  <!-- 生产环境资源 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.3.9/dist/index.css">
+  <script src="https://unpkg.com/element-plus@2.3.9/dist/index.full.min.js"></script>
+  <link rel="icon" href="/img/header.png" type="image/x-icon">
+  
+  <!-- Tailwind CSS引入 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+   // 初始化页面
+    async function initPage() {
+        const username = localStorage.getItem('username');
+        if (!username) {
+            // 未登录状态，重定向到登录页
+            window.location.href = 'https://wdbso.vip/index-login.html';
+            return;
+        }
+           // 获取并显示用户名
+          const usernameDisplay = document.getElementById('usernameDisplay');
+          if (usernameDisplay) {
+            usernameDisplay.textContent = username;
+          }
+                    // 初始化水印（确保覆盖整个页面）
+          initWatermark(username);
+          
+          // 监听窗口大小变化，重新调整水印
+          window.addEventListener('resize', () => {
+            initWatermark(username);
+          });
+
+          // 初始化用户下拉菜单（鼠标移入显示）
+          const userContainer = document.getElementById('userContainer');
+          const userDropdown = document.getElementById('userDropdown');
+          if (userContainer && userDropdown) {
+            userContainer.addEventListener('mouseenter', () => {
+              userDropdown.classList.add('active');
+            });
+            userContainer.addEventListener('mouseleave', () => {
+              userDropdown.classList.remove('active');
+            });
+          }
+          
+          // 绑定退出登录事件
+          document.getElementById('logoutBtn').addEventListener('click', function() {
+            localStorage.removeItem('hash');
+            localStorage.removeItem('username');
+            localStorage.removeItem('token');
+            checkHash();
+          });
+    }
+
+    // 检查登录状态
+    function checkHash() {
+      const hash = localStorage.getItem('hash');
+      if (!hash) {
+        redirectToLogin();
+      }
+    }
+    
+    // 重定向到登录页
+    function redirectToLogin() {
+      alert('会话已过期，请重新登录');
+      window.location.href = 'http://wdbso.vip/index-login.html';
+    }
+
+        // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', initPage);
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            success: '#00B42A',
+            warning: '#FF7D00',
+            danger: '#F53F3F',
+            'neutral-100': '#F2F3F5',
+            'neutral-200': '#E5E6EB',
+            'neutral-300': '#C9CDD4',
+            'neutral-400': '#86909C',
+            'neutral-500': '#4E5969',
+            'neutral-600': '#1D2129',
+          },
+          fontFamily: { inter: ['Inter', 'system-ui', 'sans-serif'] },
+        },
+      }
+    }
+  </script>
+  <style type="text/tailwindcss">
+    body {
+            cursor: url('/img/mouse.png'), auto;
+            position: relative; /* 确保水印能正确定位 */
+        }
+    @layer utilities {
+      .content-auto { content-visibility: auto; }
+      .card-shadow { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); }
+      .hover-lift { transition: transform 0.2s, box-shadow 0.2s; }
+      .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12); }
+      .text-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      /* 用户下拉菜单样式 */
+      .user-dropdown {
+        position: absolute;
+        right: 0;
+        top: 100%;
+        margin-top: 5px;
+        width: 180px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        z-index: 100;
+        overflow: hidden;
+        transform-origin: top right;
+        transform: scale(0.95);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.2s ease;
+      }
+      .user-dropdown.active {
+        transform: scale(1);
+        opacity: 1;
+        pointer-events: all;
+      }
+      /* 水印样式 - 确保覆盖整个页面 */
+      .watermark-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;  /* 视窗宽度 */
+        height: 100vh; /* 视窗高度 */
+        pointer-events: none; /* 不影响交互 */
+        z-index: 999; /* 确保在内容上方但不遮挡UI元素 */
+        overflow: hidden;
+        opacity: 0.04; /* 更淡的透明度，不影响内容阅读 */
+        background-repeat: repeat; /* 重复平铺 */
+      }
+      .watermark-text {
+        position: absolute;
+        font-size: 28px; /* 稍大的字体 */
+        font-weight: 600;
+        color: #000000;
+        transform: rotate(-45deg);
+        white-space: nowrap; /* 防止文本换行 */
+        user-select: none; /* 禁止选择 */
+        display: block;
+      }
+    }
+  </style>
+
+  <!-- Font Awesome -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  
+  <!-- 请求拦截器 -->
+  <script>
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = function(url, options = {}) {
+          if (typeof url === 'string' && (url.includes('wdbso.vip') || url.startsWith('/'))) {
+              if (!url.includes('wdbso.vip/a') && !url.includes('wdbso.vip/b')) {
+                  if (!options.headers) {
+                      options.headers = {};
+                  }
+                  const hash = localStorage.getItem('hash');
+                  if (hash) {
+                      options.headers['token'] = hash;
+                  }
+              }
+          }
+          return originalFetch(url, options);
+      };
+      
+      const originalXHROpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+          if (typeof url === 'string' && url.includes('wdbso.vip')) {
+              this._url = url;
+          }
+          return originalXHROpen.apply(this, arguments);
+      };
+      
+      const originalXHRSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function(body) {
+          if (this._url && this._url.includes('wdbso.vip')) {
+              if (!this._url.includes('wdbso.vip/a') && !this._url.includes('wdbso.vip/b')) {
+                  const hash = localStorage.getItem('hash');
+                  if (hash) {
+                      this.setRequestHeader('token', hash);  
+                  }
+              }
+          }
+          return originalXHRSend.call(this, body);
+      };
+    })();
+  </script>
+</head>
+
+<body class="font-inter bg-neutral-100 text-neutral-600 min-h-screen flex flex-col">
+  <div id="app" class="flex flex-col h-screen overflow-hidden">
+    <!-- 顶部导航栏 -->
+    <div class="watermark-container" id="watermarkContainer"></div>
+    <header class="bg-white border-b border-neutral-200 shadow-sm z-10">
+  <div class="w-full px-4"> <!-- 移除container mx-auto限制，使用全宽 -->
+    <div class="flex items-center justify-between h-16 max-w-full"> <!-- 允许最大宽度为全屏 -->
+      <!-- 左侧Logo和标题 - 强制居左 -->
+      <div class="flex items-center space-x-2">
+        <!-- 汉堡菜单按钮 - 放在Logo左侧，确保Logo始终在更左侧 -->
+        <button id="menuToggle" class="md:hidden text-neutral-600 hover:text-primary mr-2">
+          <i class="fa fa-bars text-xl"></i>
+        </button>
+        <div class="text-primary text-2xl">
+          <i class="fa fa-truck"></i>
+        </div>
+        <h1 class="text-xl font-bold text-neutral-600 whitespace-nowrap">管理系统</h1>
+      </div>
+      
+      <!-- 右侧用户区域 - 强制居右（新增下拉菜单） -->
+      <div class="flex items-center space-x-6 ml-auto"> <!-- ml-auto确保推到最右侧 -->
+        <!-- 通知图标 -->
+        <div class="relative cursor-pointer hover:text-primary transition-colors">
+          <i class="fa fa-bell-o text-lg"></i>
+          <span class="absolute -top-1 -right-1 bg-danger text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">3</span>
+        </div>
+        <!-- 用户信息及下拉菜单 -->
+        <div class="relative" id="userContainer">
+          <div class="flex items-center space-x-3 cursor-pointer group" id="userMenu">
+            <img src="/img/1.png" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm">
+            <span class="font-medium hidden md:inline-block" id="usernameDisplay">加载中...</span>
+            <i class="fa fa-angle-down text-neutral-400 group-hover:text-primary transition-colors"></i>
+          </div>
+          
+          <!-- 用户下拉菜单 -->
+          <div class="user-dropdown" id="userDropdown">
+            <div class="py-2">
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-user-o mr-2 text-neutral-400"></i>个人中心
+              </a>
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog mr-2 text-neutral-400"></i>系统设置
+              </a>
+              <div class="border-t border-neutral-100 my-1"></div>
+              <button id="logoutBtn" class="w-full text-left px-4 py-2 text-sm text-danger hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-out mr-2"></i>退出登录
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+    
+    <!-- 主内容区 -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- 侧边导航 -->
+      <aside class="w-64 bg-white border-r border-neutral-200 flex-shrink-0 hidden md:block transition-all duration-300" id="sidebar">
+        <nav class="py-4 h-full flex flex-col">
+          <div class="px-4 mb-4">
+            <div class="relative">
+              <input type="text" placeholder="搜索功能..." class="w-full py-2 px-3 pl-10 rounded-lg bg-neutral-100 border border-transparent focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm">
+              <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400"></i>
+            </div>
+          </div>
+          
+          <ul class="flex-1 overflow-y-auto py-2">
+            <li class="mb-1">
+              <a href="https://wdbso.vip/dashboard.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-dashboard w-5 text-center mr-3"></i>
+                <span>数据仪表盘</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khwuliu.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-history w-5 text-center mr-3"></i>
+                <span>客户物流详情</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="khruku.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-in w-5 text-center mr-3"></i>
+                <span>入库管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/errorOrders.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-exclamation-circle w-5 text-center mr-3"></i>
+                <span>异常订单管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="khyue.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-money w-5 text-center mr-3"></i>
+                <span>客户余额</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="wuliu.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-search w-5 text-center mr-3"></i>
+                <span>物流查询</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khsku.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>SKU排行榜</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/everyday.html" class="nav-link flex items-center px-4 py-3 text-primary bg-primary/5 border-r-4 border-primary font-medium">
+                <i class="fa fa-calendar-check-o w-5 text-center mr-3"></i>
+                <span>每日看板</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/jianhuo.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-clock-o w-5 text-center mr-3"></i>
+                <span>拣货时效管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="kh/settings.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog w-5 text-center mr-3"></i>
+                <span>系统设置</span>
+              </a>
+            </li>
+          </ul>
+          
+          <!-- 底部帮助区域 -->
+          <div class="p-4 border-t border-neutral-200">
+            <div class="bg-primary/5 rounded-lg p-3">
+              <h4 class="font-medium text-primary text-sm mb-2">需要帮助？</h4>
+              <p class="text-neutral-500 text-xs mb-3">查看帮助文档或联系技术支持</p>
+              <a href="#" class="text-xs text-primary hover:underline">
+                <i class="fa fa-question-circle mr-1"></i> 帮助中心
+              </a>
+            </div>
+          </div>
+        </nav>
+      </aside>
+      
+      <!-- 每日看板模块内容 -->
+      <main class="flex-1 overflow-y-auto p-4 md:p-6">
+        <!-- 页面标题和操作区 -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+          <div>
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-600">每日看板</h2>
+            <p class="text-neutral-400 mt-1">实时监控物流各项指标与异常处理进度</p>
+          </div>
+          
+          <div class="flex items-center space-x-3 mt-4 md:mt-0">
+            <button id="refreshPage" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg transition-colors flex items-center hover-lift">
+              <i class="fa fa-refresh mr-2"></i>
+              <span>刷新数据</span>
+            </button>
+            <button id="exportButton" class="bg-success hover:bg-success/90 text-white px-4 py-2 rounded-lg transition-colors flex items-center hover-lift">
+              <i class="fa fa-download mr-2"></i>
+              <span>导出数据</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 每日看板核心功能区 -->
+        <section id="everyday" class="dashboard-container">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title"></h1>
+                <!-- 新增日期选择器 -->
+                <div class="date-selector">
+                    <label for="dateFilter">选择日期:</label>
+                    <input type="date" id="dateFilter" class="form-control" />
+                </div>
+            </div>
+
+            <!-- 数据统计板块 -->
+            <div class="stats-container">
+                <h2 class="section-title">各项比率统计</h2>
+                <div id="warehouseTabs" class="warehouse-tabs">
+                    <!-- 仓库标签将通过JavaScript动态生成 -->
+                </div>
+                <div id="warehouseStats" class="warehouse-stats">
+                    <!-- 仓库统计内容将通过JavaScript动态生成 -->
+                </div>
+            </div>
+
+            <!-- 异常处理板块 -->
+            <div class="error-container">
+                <div class="section-header">
+                    <h2 class="section-title">异常处理区域</h2>
+                    <div class="error-count" id="errorCount">0 条异常</div>
+                </div>
+                <div class="table-container">
+                    <table id="errorTable" class="styled-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>异常标记日期</th>
+                                <th>异常出现日期</th>
+                                <th>仓库</th>
+                                <th>异常类型</th>
+                                <th>异常原因</th>
+                                <th>预计解决时间</th>
+                                <th>最后处理人</th>
+                                <th class="filterable">
+                                    <div class="filter-wrapper">
+                                        <span class="filter-label">升级处理人</span>
+                                        <div class="custom-select">
+                                            <select id="upgradedFilter" class="filter-select">
+                                                <option value="all">全部</option>
+                                                <option value="upgraded">已升级</option>
+                                                <option value="notUpgraded">未升级</option>
+                                            </select>
+                                            <div class="select-arrow"></div>
+                                        </div>
+                                    </div>
+                                </th>
+                                <th class="filterable">
+                                    <div class="filter-wrapper">
+                                        <span class="filter-label">是否解决</span>
+                                        <div class="custom-select">
+                                            <select id="resolveFilter" class="filter-select">
+                                                <option value="all">全部</option>
+                                                <option value="true">是</option>
+                                                <option value="false" selected>否</option>
+                                            </select>
+                                            <div class="select-arrow"></div>
+                                        </div>
+                                    </div>
+                                </th>
+                                <th>备注</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 数据将通过 JavaScript 动态填充 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- 在异常处理区域后添加导出筛选模态框 -->
+        <div id="exportModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>导出异常数据</h2>
+                    <span class="close" id="closeExportModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="exportForm">
+                        <div class="form-group">
+                            <label for="exportDateFrom">异常标记日期从:</label>
+                            <div class="input-box">
+                                <input type="date" id="exportDateFrom" name="dateFrom" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="exportDateTo">至:</label>
+                            <div class="input-box">
+                                <input type="date" id="exportDateTo" name="dateTo" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="exportHandler">最后处理人:</label>
+                            <div class="input-box">
+                                <select id="exportHandler" name="handler" multiple>
+                                    <!-- 选项将通过JavaScript动态生成 -->
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="exportResolved">是否解决:</label>
+                            <div class="input-box">
+                                <select id="exportResolved" name="resolved">
+                                    <option value="all">全部</option>
+                                    <option value="true">是</option>
+                                    <option value="false">否</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="exportUpgraded">升级状态:</label>
+                            <div class="input-box">
+                                <select id="exportUpgraded" name="upgraded">
+                                    <option value="all">全部</option>
+                                    <option value="upgraded">已升级</option>
+                                    <option value="notUpgraded">未升级</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="button" id="cancelExport" class="btn btn-cancel">取消</button>
+                            <button type="button" id="confirmExport" class="btn btn-primary">导出Excel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+            <!-- 编辑异常的模态框 -->
+        <div id="editErrorModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>编辑异常信息</h2>
+                    <span class="close" id="closeModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="editErrorForm">
+                        <input type="hidden" id="errorId" name="id">
+                        
+                        <div class="form-group">
+                            <label for="expectedResolveTime">预计解决时间:</label>
+                            <div class="input-box">
+                                <input type="datetime-local" id="expectedResolveTime" name="预计解决时间" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="lastHandler">最后处理人:</label>
+                            <div class="input-box">
+                                <select id="lastHandler" name="最后处理人" required>
+                                    <option value="李建廷">李建廷</option>
+                                    <option value="小熊">小熊</option>
+                                    <option value="雪儿">雪儿</option>
+                                    <option value="晓晓">晓晓</option>
+                                    <option value="贵德">贵德</option>
+                                    <option value="小杨">小杨</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="upgradedHandler">升级处理人:</label>
+                            <div class="input-box">
+                                <select id="upgradedHandler" name="升级处理人">
+                                    <option value="">请选择升级处理人</option>
+                                    <option value="滨滨">滨滨</option>
+                                    <option value="Tank">Tank</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="isResolved">是否解决:</label>
+                            <div class="input-box">
+                                <select id="isResolved" name="是否解决" required>
+                                    <option value="true">是</option>
+                                    <option value="false">否</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="existingRemarks">历史备注:</label>
+                            <div class="input-box">
+                                <textarea id="existingRemarks" name="existingRemarks" rows="4" readonly></textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="newRemark">新增备注:</label>
+                            <div class="input-box">
+                                <textarea id="newRemark" name="newRemark" rows="4" placeholder="请输入新增备注内容..."></textarea>
+                            </div>
+                        </div>
+                        
+                        <!-- 新增附件下载按钮 -->
+                        <div class="form-group">
+                            <button type="button" id="downloadAttachmentBtn" class="btn btn-primary">
+                                <i class="fa fa-download mr-2"></i>下载附件
+                            </button>
+                        </div>
+                        
+                        <!-- 新增附件上传区域 -->
+                        <div class="form-group" id="attachmentUploadSection">
+                            <label for="attachmentFiles">上传附件 (如选择"是"解决，必须上传附件):</label>
+                            <div class="input-box">
+                                <input type="file" id="attachmentFiles" name="attachmentFiles" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.mp4">
+                                <div id="attachmentPreview" class="mt-2"></div>
+                            </div>
+                            <div id="attachmentError" class="text-error" style="display: none; color: red;">
+                                选择"是"解决时必须上传附件
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="button" id="cancelEdit" class="btn btn-cancel">取消</button>
+                            <button type="submit" class="btn btn-primary">保存</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+
+            <style>
+                  /* 新增样式 */
+            #exportModal .form-group {
+                margin-bottom: 16px;
+            }
+            
+            #exportModal .input-box {
+                background-color: white;
+                border: 1px solid var(--border-color);
+                border-radius: 4px;
+                padding: 8px;
+            }
+            
+            #exportModal select[multiple] {
+                height: 100px;
+            }
+                /* 全局样式 */
+                #everyday :root {
+                    --primary-color: #165DFF;
+                    --secondary-color: #0FC6C2;
+                    --warning-color: #FF7D00;
+                    --success-color: #00B42A;
+                    --error-color: #F53F3F;
+                    --neutral-color: #86909C;
+                    --border-color: #E5E6EB;
+                    --bg-color: #F2F3F5;
+                    --text-color: #1D2129;
+                    --text-light: #4E5969;
+                    --edit-box-bg: #f9f9f9;
+                    --edit-btn-color: #092D7A; 
+                    --edit-btn-hover: #062058; 
+                    --save-btn-color: #092D7A; 
+                    --save-btn-hover: #062058; 
+                }
+
+                #everyday * {
+                    box-sizing: border-box;
+                    font-family: 'Inter', 'system-ui', sans-serif;
+                }
+
+                #everyday body {
+                    color: var(--text-color);
+                    line-height: 1.6;
+                    background-color: #f5f7fa;
+                }
+
+                /* 仪表盘容器 */
+                #everyday .dashboard-container {
+                    padding: 24px;
+                    max-width: 1600px;
+                    margin: 0 auto;
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+                }
+
+                #everyday .dashboard-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 24px;
+                }
+
+                #everyday .dashboard-title {
+                    color: var(--primary-color);
+                    font-size: 28px;
+                    font-weight: 600;
+                    margin: 0;
+                }
+
+                /* 新增日期选择器样式 */
+                #everyday .date-selector {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                #everyday .date-selector label {
+                    font-weight: 500;
+                    color: var(--text-light);
+                }
+
+                #everyday .date-selector input {
+                    padding: 8px 12px;
+                    border: 1px solid var(--border-color);
+                    border-radius: 4px;
+                    font-size: 14px;
+                    transition: all 0.3s ease;
+                }
+
+                #everyday .date-selector input:hover {
+                    border-color: var(--primary-color);
+                }
+
+                #everyday .date-selector input:focus {
+                    outline: none;
+                    border-color: var(--primary-color);
+                    box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.2);
+                }
+
+                /* 统计卡片样式 */
+                #everyday .stats-container {
+                    margin-bottom: 32px;
+                    background-color: var(--bg-color);
+                    padding: 20px;
+                    border-radius: 8px;
+                }
+
+                #everyday .section-title {
+                    font-size: 20px;
+                    font-weight: 500;
+                    margin-bottom: 16px;
+                    color: var(--text-color);
+                    border-left: 4px solid var(--primary-color);
+                    padding-left: 12px;
+                }
+
+                #everyday .warehouse-tabs {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-bottom: 16px;
+                }
+
+                #everyday .warehouse-tab {
+                    padding: 8px 16px;
+                    background-color: white;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    font-weight: 500;
+                    border: 1px solid var(--border-color);
+                }
+
+                #everyday .warehouse-tab:hover {
+                    background-color: #E5E6EB;
+                }
+
+                #everyday .warehouse-tab.active {
+                    background-color: var(--primary-color);
+                    color: white;
+                    border-color: var(--primary-color);
+                }
+
+                #everyday .warehouse-stats {
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+                    padding: 20px;
+                    border: 1px solid var(--border-color);
+                }
+
+                #everyday .stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                    gap: 24px;
+                }
+
+                #everyday .stat-card {
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+                    padding: 20px;
+                    border: 1px solid var(--border-color);
+                    transition: all 0.3s ease;
+                    background-color: var(--edit-box-bg);
+                }
+
+                #everyday .stat-card:hover {
+                    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+                    transform: translateY(-2px);
+                }
+
+                #everyday .stat-header {
+                    margin-bottom: 16px;
+                    padding-bottom: 12px;
+                    border-bottom: 1px solid var(--border-color);
+                }
+
+                #everyday .stat-label {
+                    color: var(--text-light);
+                    font-size: 14px;
+                    margin-right: 8px;
+                }
+
+                #everyday .stat-value {
+                    font-size: 16px;
+                    font-weight: 500;
+                }
+
+                #everyday .stat-value-large {
+                    font-size: 24px;
+                    font-weight: 600;
+                    color: var(--primary-color);
+                    margin-top: 8px;
+                }
+
+                #everyday .stat-value-multi p {
+                    margin: 4px 0;
+                }
+
+                #everyday .loading {
+                    color: var(--neutral-color);
+                    position: relative;
+                    overflow: hidden;
+                }
+
+                #everyday .loading::after {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: -100%;
+                    width: 100%;
+                    height: 100%;
+                    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+                    animation: loading 1.5s infinite;
+                }
+
+                #everyday @keyframes loading {
+                    100% {
+                        left: 100%;
+                    }
+                }
+
+                /* 异常表格样式 */
+                #everyday .error-container {
+                    margin-bottom: 32px;
+                    background-color: var(--bg-color);
+                    padding: 20px;
+                    border-radius: 8px;
+                }
+
+                #everyday .section-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 16px;
+                }
+
+                #everyday .error-count {
+                    background-color: white;
+                    padding: 4px 12px;
+                    border-radius: 16px;
+                    font-size: 14px;
+                    color: var(--text-light);
+                    border: 1px solid var(--border-color);
+                }
+
+                #everyday .table-container {
+                    overflow-x: auto;
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+                    border: 1px solid var(--border-color);
+                }
+
+                #everyday .styled-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+
+                #everyday .styled-table th {
+                    background-color: var(--bg-color);
+                    text-align: left;
+                    padding: 12px 16px;
+                    font-weight: 500;
+                    color: var(--text-light);
+                    border-bottom: 2px solid var(--border-color);
+                }
+
+                #everyday .styled-table td {
+                    padding: 12px 16px;
+                    border-bottom: 1px solid var(--border-color);
+                    color: var(--text-color);
+                }
+
+                #everyday .styled-table tr:last-child td {
+                    border-bottom: none;
+                }
+
+                #everyday .styled-table tr:hover {
+                    background-color: #F0F2F5;
+                    transform: translateX(2px);
+                    transition: transform 0.2s ease, background-color 0.2s ease;
+                }
+
+                #everyday .styled-table td:nth-child(9) {
+                    font-weight: 500;
+                }
+
+                #everyday .upgraded td:nth-child(9) {
+                    color: var(--warning-color);
+                    font-weight: 600;
+                    position: relative;
+                }
+                
+                #everyday .upgraded td:nth-child(9)::before {
+                    content: '▲';
+                    margin-right: 4px;
+                    font-size: 10px;
+                }
+                
+                #everyday .unresolved td:nth-child(10) {
+                    color: var(--error-color);
+                }
+                
+                #everyday .resolved td:nth-child(10) {
+                    color: var(--success-color);
+                }
+                /* 临时禁用表格行动画 */
+                #everyday .styled-table tr {
+                  transition: none !important; /* 取消过渡动画 */
+                  opacity: 1 !important; /* 直接显示 */
+                  transform: none !important;
+                }
+
+                /* 编辑按钮样式 */
+                #everyday .edit-btn {
+                    background-color: var(--edit-btn-color, #2563eb);
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    font-size: 14px;
+                    font-weight: 500;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                }
+                
+                /* 按钮悬停效果 */
+                #everyday .edit-btn:hover {
+                    background-color: #1e40af;
+                    color: white;
+                    transform: translateY(-1px);
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                }
+
+                /* 筛选框样式优化 */
+                #everyday .filterable {
+                    position: relative;
+                }
+
+                #everyday .filter-wrapper {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                #everyday .filter-label {
+                    font-weight: 500;
+                    color: var(--text-light);
+                }
+
+                #everyday .custom-select {
+                    position: relative;
+                    min-width: 100px;
+                }
+
+                #everyday .filter-select {
+                    appearance: none;
+                    -webkit-appearance: none;
+                    -moz-appearance: none;
+                    width: 100%;
+                    padding: 6px 30px 6px 12px;
+                    border: 1px solid var(--border-color);
+                    border-radius: 4px;
+                    background-color: white;
+                    color: var(--text-color);
+                    font-size: 14px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                }
+
+                #everyday .filter-select:hover {
+                    border-color: var(--primary-color);
+                    box-shadow: 0 1px 3px rgba(22, 93, 255, 0.1);
+                }
+
+                #everyday .filter-select:focus {
+                    outline: none;
+                    border-color: var(--primary-color);
+                    box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.2);
+                }
+
+                #everyday .select-arrow {
+                    position: absolute;
+                    top: 50%;
+                    right: 10px;
+                    transform: translateY(-50%);
+                    pointer-events: none;
+                    width: 0;
+                    height: 0;
+                    border-left: 4px solid transparent;
+                    border-right: 4px solid transparent;
+                    border-top: 6px solid var(--text-light);
+                    transition: transform 0.3s ease;
+                }
+
+                #everyday .custom-select:hover .select-arrow {
+                    border-top-color: var(--primary-color);
+                }
+
+                #everyday .custom-select:focus-within .select-arrow {
+                    transform: translateY(-50%) rotate(180deg);
+                    border-top-color: var(--primary-color);
+                }
+
+                /* 模态框样式 */
+                #everyday .modal {
+                    position: fixed;
+                    z-index: 1000;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    height: 100%;
+                    overflow: auto;
+                    background-color: rgba(0,0,0,0.5);
+                    backdrop-filter: blur(2px);
+                    transition: background-color 0.3s ease;
+                }
+
+                #everyday .modal-content {
+                    background-color: #fefefe;
+                    margin: 15% auto;
+                    padding: 20px;
+                    border: 1px solid #888;
+                    border-radius: 8px;
+                    width: 80%;
+                    max-width: 600px;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                    position: relative;
+                    z-index: 1001;
+                    transform: scale(1);
+                    transition: transform 0.3s ease;
+                    background-color: var(--bg-color);
+                }
+                
+                #everyday .modal-content:hover {
+                    transform: scale(1.01);
+                }
+            
+                #everyday .modal-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 20px;
+                    border-bottom: 1px solid var(--border-color);
+                    padding-bottom: 10px;
+                }
+
+                #everyday .modal-header h2 {
+                    margin: 0;
+                    color: var(--primary-color);
+                }
+
+                #everyday .close {
+                    color: #aaa;
+                    font-size: 28px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    transition: color 0.3s ease;
+                }
+
+                #everyday .close:hover,
+                #everyday .close:focus {
+                    color: var(--error-color);
+                    text-decoration: none;
+                }
+
+                #everyday .form-group {
+                    margin-bottom: 16px;
+                }
+
+                #everyday .form-group label {
+                    display: block;
+                    margin-bottom: 8px;
+                    font-weight: 500;
+                }
+
+                #everyday .input-box {
+                    background-color: var(--edit-box-bg);
+                    border: 1px solid var(--border-color);
+                    border-radius: 4px;
+                    padding: 8px;
+                    transition: all 0.3s ease;
+                }
+                
+                #everyday .input-box:hover {
+                    border-color: var(--primary-color);
+                }
+
+                #everyday .form-group input,
+                #everyday .form-group select,
+                #everyday .form-group textarea {
+                    width: 100%;
+                    padding: 10px 14px;
+                    border: none;
+                    border-radius: 4px;
+                    font-size: 14px;
+                    transition: all 0.3s ease;
+                    background-color: white;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+                }
+
+                #everyday .form-group input:focus,
+                #everyday .form-group select:focus,
+                #everyday .form-group textarea:focus {
+                    outline: none;
+                    border-color: var(--primary-color);
+                    box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.2);
+                }
+            
+                #everyday .form-actions {
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 10px;
+                    margin-top: 20px;
+                }
+
+                #everyday .btn {
+                    padding: 10px 18px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    font-weight: 500;
+                    transition: all 0.3s ease;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+
+                /* 保存按钮样式 */
+                #everyday .btn-primary {
+                    background-color: var(--edit-btn-color, #2563eb);
+                    color: #fff;
+                    border: none;
+                    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+                    transition: all 0.3s ease;
+                }
+
+                #everyday .btn-primary:hover {
+                    background-color: #1e40af;
+                    color: white;
+                    box-shadow: 0 4px 6px rgba(30, 64, 175, 0.3);
+                    transform: translateY(-1px);
+                }
+
+                #everyday .btn-primary:active {
+                    transform: translateY(0);
+                }
+
+                #everyday .btn-cancel {
+                    background-color: var(--bg-color);
+                    color: var(--text-color);
+                    border: none;
+                }
+
+                #everyday .btn-cancel:hover {
+                    background-color: #E5E6EB;
+                }
+
+                /* 响应式设计 */
+                #everyday @media (max-width: 768px) {
+                    .stats-grid {
+                        grid-template-columns: 1fr;
+                    }
+
+                    .dashboard-title {
+                        font-size: 24px;
+                    }
+
+                    .section-title {
+                        font-size: 18px;
+                    }
+                    
+                    .modal-content {
+                        width: 90%;
+                    }
+                    
+                    .filter-wrapper {
+                        flex-direction: column;
+                        align-items: flex-start;
+                        gap: 4px;
+                    }
+                    
+                    .custom-select {
+                        min-width: 80px;
+                    }
+                    
+                    .styled-table th, .styled-table td {
+                        padding: 8px 10px;
+                        font-size: 14px;
+                    }
+                    
+                    .dashboard-header {
+                        flex-direction: column;
+                        align-items: flex-start;
+                        gap: 12px;
+                    }
+                }
+                
+                .rate-warning {
+                    color: #F53F3F !important;
+                    font-weight: bold !important;
+                }
+            </style>
+
+            <script>
+            function initWatermark(username) {
+      const container = document.getElementById('watermarkContainer');
+      if (!container || !username) return;
+      
+      // 清空现有水印
+      container.innerHTML = '';
+      
+      // 获取视窗尺寸，确保水印覆盖整个可见区域
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // 计算水印数量和间距（增加密度确保完全覆盖）
+      const step = 200; // 水印间距（像素）- 更小的间距意味着更密集的水印
+      const horizontalCount = Math.ceil(windowWidth / step) + 1; // 水平方向水印数量
+      const verticalCount = Math.ceil(windowHeight / step) + 1;   // 垂直方向水印数量
+      
+      // 创建水印网格
+      for (let i = 0; i < verticalCount; i++) {
+        for (let j = 0; j < horizontalCount; j++) {
+          const watermark = document.createElement('div');
+          watermark.className = 'watermark-text';
+          watermark.textContent = username;
+          
+          // 计算位置（覆盖整个视窗）
+          const left = j * step - step/2; // 向左偏移一半间距，确保边缘也有覆盖
+          const top = i * step - step/2;  // 向上偏移一半间距
+          
+          // 设置位置和样式
+          watermark.style.left = `${left}px`;
+          watermark.style.top = `${top}px`;
+          
+          container.appendChild(watermark);
+        }
+      }
+    }
+                document.addEventListener('DOMContentLoaded', function () {
+                // 存储所有仓库的数据
+                let allWarehouseData = {};
+                // 存储所有异常数据
+                let allErrorData = [];
+                // 当前选中的日期
+                let currentDate = new Date();
+                
+                // 初始化日期选择器
+                const dateFilter = document.getElementById('dateFilter');
+                dateFilter.valueAsDate = currentDate;
+                dateFilter.addEventListener('change', function() {
+                    currentDate = new Date(this.value);
+                    updateDisplayedData();
+                });
+                
+                // 添加筛选事件监听器
+                const resolveFilter = document.getElementById('resolveFilter');
+                resolveFilter.addEventListener('change', filterTable);
+                
+                const upgradedFilter = document.getElementById('upgradedFilter');
+                upgradedFilter.addEventListener('change', filterTable);
+                
+                // 导出按钮事件
+                document.getElementById('exportButton').addEventListener('click', function() {
+                    document.getElementById('exportModal').style.display = 'block';
+                    document.body.style.overflow = 'hidden';
+                    
+                    // 初始化导出表单的日期范围为当前选中日期
+                    const formattedDate = formatDateForInput(currentDate);
+                    document.getElementById('exportDateFrom').value = formattedDate;
+                    document.getElementById('exportDateTo').value = formattedDate;
+                    
+                    // 初始化处理人选项
+                    const handlerSelect = document.getElementById('exportHandler');
+                    handlerSelect.innerHTML = '';
+                    const handlers = ['李建廷','小熊', '雪儿', '晓晓', '贵德', '小杨'];
+                    handlers.forEach(handler => {
+                        const option = document.createElement('option');
+                        option.value = handler;
+                        option.textContent = handler;
+                        handlerSelect.appendChild(option);
+                    });
+                });
+                
+                // 关闭导出模态框
+                document.getElementById('closeExportModal').addEventListener('click', function() {
+                    document.getElementById('exportModal').style.display = 'none';
+                    document.body.style.overflow = '';
+                });
+                
+                document.getElementById('cancelExport').addEventListener('click', function() {
+                    document.getElementById('exportModal').style.display = 'none';
+                    document.body.style.overflow = '';
+                });
+                
+                // 确认导出
+                document.getElementById('confirmExport').addEventListener('click', async function() {
+                    const dateFrom = document.getElementById('exportDateFrom').value;
+                    const dateTo = document.getElementById('exportDateTo').value;
+                    const resolved = document.getElementById('exportResolved').value;
+                    const upgraded = document.getElementById('exportUpgraded').value;
+                    
+                    // 获取选中的处理人
+                    const handlerSelect = document.getElementById('exportHandler');
+                    const handlers = Array.from(handlerSelect.selectedOptions).map(option => option.value);
+                    
+                    if (!dateFrom || !dateTo) {
+                        alert('请选择日期范围');
+                        return;
+                    }
+                    
+                    try {
+                        // 显示加载状态
+                        this.disabled = true;
+                        this.textContent = '导出中...';
+                        
+                        // 调用导出API
+                        const response = await fetch('/exportErrorData', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                dateFrom,
+                                dateTo,
+                                handlers,
+                                resolved,
+                                upgraded
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`导出失败，状态码: ${response.status}`);
+                        }
+                        
+                        // 处理二进制响应
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        
+                        // 创建下载链接
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `异常数据_${dateFrom}_to_${dateTo}.xlsx`;
+                        document.body.appendChild(a);
+                        a.click();
+                        
+                        // 清理
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                        
+                        // 关闭模态框
+                        document.getElementById('exportModal').style.display = 'none';
+                        document.body.style.overflow = '';
+                        
+                        alert('导出成功');
+                    } catch (error) {
+                        console.error('导出数据时出错:', error);
+                        alert(`导出失败: ${error.message}`);
+                    } finally {
+                        // 恢复按钮状态
+                        this.disabled = false;
+                        this.textContent = '导出Excel';
+                    }
+                });
+                
+                // 筛选函数
+                function filterTable() {
+                    const resolveValue = resolveFilter.value;
+                    const upgradedValue = upgradedFilter.value;
+                    const rows = document.querySelectorAll('#errorTable tbody tr');
+    
+                    rows.forEach(row => {
+                        const resolved = row.querySelector('td:nth-child(10)').textContent.trim().toLowerCase() === '是';
+                        const upgraded = row.classList.contains('upgraded');
+                        
+                        let showByResolve = true;
+                        let showByUpgraded = true;
+                        
+                        if (resolveValue !== 'all') {
+                            showByResolve = (resolveValue === 'true' && resolved) || (resolveValue === 'false' && !resolved);
+                        }
+                        
+                        if (upgradedValue !== 'all') {
+                            showByUpgraded = (upgradedValue === 'upgraded' && upgraded) || (upgradedValue === 'notUpgraded' && !upgraded);
+                        }
+                        
+                        row.style.display = showByResolve && showByUpgraded ? '' : 'none';
+                    });
+                }
+                // 新增：下载附件功能
+            document.getElementById('downloadAttachmentBtn').addEventListener('click', async function() {
+                const errorId = document.getElementById('errorId').value;
+                
+                if (!errorId) {
+                    alert('无法获取异常ID，无法下载附件');
+                    return;
+                }
+                
+                // 显示加载状态
+                this.disabled = true;
+                this.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>下载中...';
+                
+                try {
+                    // 调用下载接口
+                    const response = await fetch('/downloadFiles', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ id: errorId })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`下载附件失败，状态码: ${response.status}`);
+                    }
+                    
+                    // 检查响应类型
+                    const contentType = response.headers.get('content-type');
+                    
+                    if (contentType && contentType.includes('application/json')) {
+                        // 如果返回JSON，说明有错误
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || '下载附件失败');
+                    }
+                    
+                    // 处理二进制响应
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    
+                    // 创建下载链接
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    // 从响应头获取文件名，如果没有则使用默认文件名
+                    const contentDisposition = response.headers.get('content-disposition');
+                    if (contentDisposition && contentDisposition.includes('attachment')) {
+                        const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                        const matches = filenameRegex.exec(contentDisposition);
+                        if (matches != null && matches[1]) {
+                            a.download = matches[1].replace(/['"]/g, '');
+                        }
+                    } else {
+                        a.download = `files_${errorId}.zip`;
+                    }
+                    
+                    // 触发下载
+                    document.body.appendChild(a);
+                    a.click();
+                    
+                    // 清理
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    alert('附件下载成功');
+                } catch (error) {
+                    console.error('下载附件时出错:', error);
+                    alert(`下载附件失败: ${error.message}`);
+                } finally {
+                    // 恢复按钮状态
+                    this.disabled = false;
+                    this.innerHTML = '<i class="fa fa-download mr-2"></i>下载附件';
+                }
+            });
+
+                // 获取异常数据
+                async function fetchErrorData() {
+                    try {
+                        const response = await fetch('/getErrorData');
+                        if (!response.ok) {
+                            throw new Error(`网络响应不正常，状态码: ${response.status}`);
+                        }
+                        const data = await response.json();
+                        allErrorData = data.data;
+                        
+                        // 加载数据后更新显示
+                        updateDisplayedErrorData();
+                    } catch (error) {
+                        console.error('获取异常数据时出错:', error);
+                        alert('获取异常数据时出错，请稍后重试。');
+                        
+                        // 显示错误信息
+                        const errorTableBody = document.getElementById('errorTable').getElementsByTagName('tbody')[0];
+                        errorTableBody.innerHTML = `
+                            <tr>
+                                <td colspan="11" style="text-align: center; color: var(--error-color); padding: 20px;">
+                                    加载异常数据失败，请稍后重试
+                                </td>
+                            </tr>
+                        `;
+                    }
+                }
+            
+                // 为每日看板导航链接添加点击事件监听器
+                const everydayLink = document.querySelector('a[href="everyday.html"]');
+                const everydaySection = document.getElementById('everyday');
+            
+                if (everydayLink) {
+                    everydayLink.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        everydaySection.style.display = 'block';
+                        // 调用接口获取各项比率数据
+                        fetchStatsData();
+                        // 调用接口获取异常数据
+                        fetchErrorData();
+                    });
+                }
+                
+                // 页面加载时自动加载数据
+                fetchStatsData();
+                fetchErrorData();
+                
+                // 定义一组颜色用于仓库标签
+                const warehouseColors = [
+                    '#165DFF', '#0FC6C2', '#FF7D00', '#00B42A', '#F53F3F',
+                    '#722ED1', '#EB0AA4', '#FF4D4F', '#FAAD14', '#13C2C2',
+                    '#86909C', '#1D2129', '#4E5969', '#27AE60', '#9B59B6'
+                ];
+            
+                // 获取统计数据
+                async function fetchStatsData() {
+                    try {
+                        const response = await fetch('/getStatsData');
+                        if (!response.ok) {
+                            throw new Error(`网络响应不正常，状态码: ${response.status}`);
+                        }
+                        const data = await response.json();
+                        allWarehouseData = data.data;
+                        
+                        // 加载数据后更新显示
+                        updateDisplayedStatsData();
+                    } catch (error) {
+                        console.error('获取各项比率数据时出错:', error);
+                        alert('获取各项比率数据时出错，请稍后重试。');
+                        // 显示错误信息
+                        document.getElementById('warehouseStats').innerHTML = `
+                            <div style="text-align: center; padding: 40px; color: var(--error-color);">
+                                <p>加载数据失败，请稍后重试</p>
+                            </div>
+                        `;
+                    }
+                }
+                
+                // 刷新按钮事件
+                document.getElementById('refreshPage').addEventListener('click', function() {
+                    // 显示加载状态
+                    this.disabled = true;
+                    this.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>刷新中...';
+                    
+                    // 重新加载数据
+                    fetchStatsData().then(() => {
+                        fetchErrorData().then(() => {
+                            // 恢复按钮状态
+                            this.disabled = false;
+                            this.innerHTML = '<i class="fa fa-refresh mr-2"></i>刷新数据';
+                            alert('数据已刷新');
+                        });
+                    });
+                });
+                
+                // 更新显示的统计数据
+                function updateDisplayedStatsData() {
+                    // 获取当前选中日期的数据
+                    const todayData = filterDataByDate(allWarehouseData, currentDate);
+                    
+                    // 按仓库分组数据
+                    const warehouseGroups = groupDataByWarehouse(todayData);
+                    
+                    // 生成仓库标签
+                    const warehouseTabs = document.getElementById('warehouseTabs');
+                    warehouseTabs.innerHTML = '';
+                    
+                    Object.keys(warehouseGroups).forEach((warehouse, index) => {
+                        const tab = document.createElement('div');
+                        const colorIndex = index % warehouseColors.length;
+                        const bgColor = warehouseColors[colorIndex];
+                        
+                        tab.className = `warehouse-tab ${index === 0 ? 'active' : ''}`;
+                        tab.textContent = warehouse;
+                        
+                        // 设置标签的背景色和文本颜色
+                        tab.style.backgroundColor = index === 0 ? bgColor : 'var(--bg-color)';
+                        tab.style.color = index === 0 ? 'white' : 'var(--text-color)';
+                        tab.style.border = `2px solid ${bgColor}`;
+                        tab.style.borderRadius = '4px';
+                        tab.style.marginRight = '8px';
+                        tab.style.padding = '8px 16px';
+                        tab.style.cursor = 'pointer';
+                        tab.style.transition = 'background-color 0.3s ease';
+                        
+                        // 存储颜色信息，用于点击时恢复
+                        tab.dataset.color = bgColor;
+                        
+                        // 点击标签切换仓库数据
+                        tab.addEventListener('click', () => {
+                            document.querySelectorAll('.warehouse-tab').forEach(t => {
+                                const c = t.dataset.color;
+                                t.classList.remove('active');
+                                t.style.backgroundColor = 'var(--bg-color)';
+                                t.style.color = 'var(--text-color)';
+                            });
+                            tab.classList.add('active');
+                            tab.style.backgroundColor = bgColor;
+                            tab.style.color = 'white';
+                            displayWarehouseStats(warehouse);
+                        });
+                        
+                        // 鼠标悬停效果
+                        tab.addEventListener('mouseenter', () => {
+                            if (!tab.classList.contains('active')) {
+                                tab.style.backgroundColor = '#E5E6EB';
+                            }
+                        });
+                        
+                        tab.addEventListener('mouseleave', () => {
+                            if (!tab.classList.contains('active')) {
+                                tab.style.backgroundColor = 'var(--bg-color)';
+                            }
+                        });
+                        
+                        warehouseTabs.appendChild(tab);
+                    });
+                    
+                    // 默认显示第一个仓库的数据
+                    if (Object.keys(warehouseGroups).length > 0) {
+                        displayWarehouseStats(Object.keys(warehouseGroups)[0]);
+                    } else {
+                        document.getElementById('warehouseStats').innerHTML = `
+                            <div style="text-align: center; padding: 40px;">
+                                <p>${formatDate(currentDate)}暂无数据</p>
+                            </div>
+                        `;
+                    }
+                }
+                
+                // 更新显示的异常数据
+                function updateDisplayedErrorData() {
+                    // 使用全部异常数据，不进行日期过滤
+                    const todayData = [...allErrorData];
+                    
+                    // 填充表格数据
+                    const tableBody = document.getElementById('errorTable').getElementsByTagName('tbody')[0];
+                    tableBody.innerHTML = '';
+                    
+                    todayData.forEach(error => {
+                        const row = tableBody.insertRow();
+                        row.dataset.id = error.id;
+                        
+                        // 添加升级状态的判断逻辑
+                        let isUpgraded = false;
+                        if (error.升级处理人) {
+                            isUpgraded = true;
+                            row.className = 'upgraded';
+                        } else if (!error.是否解决 && error.预计解决时间) {
+                            const now = new Date();
+                            const expectedTime = new Date(error.预计解决时间);
+                            if (now > expectedTime) {
+                                isUpgraded = true;
+                                row.className = 'upgraded';
+                                row.style.backgroundColor = '#FFF2E8'; // 添加浅黄色背景
+                            } else {
+                                row.className = error.是否解决 ? 'resolved' : 'unresolved';
+                            }
+                        } else {
+                            row.className = error.是否解决 ? 'resolved' : 'unresolved';
+                        }
+                        row.insertCell(0).textContent = error.id;
+                        row.insertCell(1).textContent = new Date(error.异常标记日期).toLocaleDateString();
+                        row.insertCell(2).textContent = new Date(error.异常出现日期).toLocaleDateString();
+                        row.insertCell(3).textContent = error.仓库 || 'N/A/A';
+                        row.insertCell(4).textContent = error.异常类型;
+                        row.insertCell(5).textContent = error.异常原因;
+                        
+                        // 格式化预计解决时间
+                        const expectedResolveTimeCell = row.insertCell(6);
+                        expectedResolveTimeCell.textContent = error.预计解决时间 ? 
+                            new Date(error.预计解决时间).toLocaleString() : 'N/A';
+                        
+                        row.insertCell(7).textContent = error.最后处理人;
+                        
+                        // 升级处理人显示逻辑
+                        let upgradedHandlerText = error.升级处理人 || '未升级';
+                        row.insertCell(8).textContent = upgradedHandlerText;
+                        
+                        const resolvedCell = row.insertCell(9);
+                        resolvedCell.textContent = error.是否解决 ? '是' : '否';
+                        resolvedCell.className = error.是否解决 ? 'success' : 'error';
+                        
+                        // 处理备注显示 - 只显示用户名和备注内容
+                        const remarksCell = row.insertCell(10);
+                        if (error.备注) {
+                            // 提取备注中的用户名和备注内容
+                            const simplifiedRemarks = simplifyRemarks(error.备注);
+                            
+                            // 处理每条备注增加换行
+                            const formattedRemarks = simplifiedRemarks
+                                .split('\n') // 先按原有的换行符分割
+                                .map(remark => remark.trim()) // 去除每行前后空格
+                                .filter(remark => remark.length > 0) // 过滤空行
+                                .join('\n\n'); // 每条备注之间用两个换行符分隔
+                            
+                            remarksCell.textContent = formattedRemarks;
+                        } else {
+                            remarksCell.textContent = '无备注';
+                        }
+                        
+                        // 添加编辑按钮
+                        const actionCell = row.insertCell(11);
+                        const editBtn = document.createElement('button');
+                        editBtn.className = 'edit-btn';
+                        editBtn.textContent = '编辑';
+                        editBtn.addEventListener('click', () => openEditModal(error));
+                        actionCell.appendChild(editBtn);
+                    });
+                    
+                    // 数据加载完成后进行筛选
+                    filterTable();
+                    
+                    // 更新异常计数 - 只统计未解决的异常
+                    const unresolvedCount = todayData.filter(error => !error.是否解决).length;
+                    document.getElementById('errorCount').textContent = `${unresolvedCount} 条异常`;
+                    
+                    // 添加表格动画
+                    const rows = tableBody.querySelectorAll('tr');
+                    rows.forEach((row, index) => {
+                        row.style.opacity = '0';
+                        row.style.transform = 'translateY(20px)';
+                        setTimeout(() => {
+                            row.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                            row.style.opacity = '1';
+                            row.style.transform = 'translateY(0)';
+                        }, 100 * index);
+                    });
+                }
+                
+                // 根据日期过滤数据
+                function filterDataByDate(data, targetDate) {
+                    // 确保targetDate是UTC时间的0点
+                    const targetDateUTC = new Date(targetDate);
+                    targetDateUTC.setHours(0, 0, 0, 0);
+                    
+                    return data.filter(item => {
+                        if (!item.上传日期) {
+                            return false;
+                        }
+                        const uploadDate = new Date(item.上传日期);
+                        uploadDate.setHours(0, 0, 0, 0);
+                        return uploadDate.getTime() === targetDateUTC.getTime();
+                    });
+                }
+                
+                // 根据日期过滤异常数据
+                function filterErrorDataByDate(data, targetDate) {
+                    // 确保targetDate是UTC时间的0点
+                    const targetDateUTC = new Date(targetDate);
+                    targetDateUTC.setHours(0, 0, 0, 0);
+                    
+                    return data.filter(item => {
+                        if (!item.异常出现日期) {
+                            return false;
+                        }
+                        const errorDate = new Date(item.异常出现日期);
+                        errorDate.setHours(0, 0, 0, 0);
+                        return errorDate.getTime() === targetDateUTC.getTime();
+                    });
+                }
+                
+                // 按仓库分组数据
+                function groupDataByWarehouse(data) {
+                    const warehouseGroups = {};
+                    data.forEach(item => {
+                        const warehouse = item.仓库 || '未知仓库';
+                        if (!warehouseGroups[warehouse]) {
+                            warehouseGroups[warehouse] = [];
+                        }
+                        warehouseGroups[warehouse].push(item);
+                    });
+                    return warehouseGroups;
+                }
+                
+                // 显示仓库统计信息
+                function displayWarehouseStats(warehouse) {
+                    const warehouseData = allWarehouseData.filter(item => 
+                        (item.仓库 || '未知仓库') === warehouse && 
+                        new Date(item.上传日期).toDateString() === currentDate.toDateString()
+                    );
+                    
+                    if (!warehouseData || warehouseData.length === 0) {
+                        document.getElementById('warehouseStats').innerHTML = `
+                            <div style="text-align: center; padding: 40px;">
+                                <p>${warehouse}在${formatDate(currentDate)}暂无数据</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    // 找出上传日期当天最高的出库率，处理 null 为 0
+                    let maxDeliveryRate = 0;
+                    let deliveryDate = 'N/A';
+                    warehouseData.forEach(item => {
+                        const rate = item.出库率 === null ? 0 : parseFloat(item.出库率);
+                        if (rate > maxDeliveryRate) {
+                            maxDeliveryRate = rate;
+                            deliveryDate = item.出库率日期 ? new Date(item.出库率日期).toLocaleDateString() : 'N/A';
+                        }
+                    });
+                    const deliveryRate1 = maxDeliveryRate > 0 ? maxDeliveryRate.toFixed(2) : 'N/A';
+                    
+                    // 处理上架率，找出上传日期当天最高的上架率，处理 null 为 0
+                    let maxShelfRate = 0;
+                    let shelfDate = 'N/A';
+                    warehouseData.forEach(item => {
+                        const rate = item.上架率 === null ? 0 : parseFloat(item.上架率);
+                        if (rate > maxShelfRate) {
+                            maxShelfRate = rate;
+                            shelfDate = item.上架率日期 ? new Date(item.上架率日期).toLocaleDateString() : 'N/A';
+                        }
+                    });
+                    const shelfRate = maxShelfRate > 0 ? maxShelfRate.toFixed(2) : 'N/A';
+                    
+                    // 处理上网率，分渠道展示，处理 null 为 0
+                    const onlineRateByChannelMap = new Map();
+                    let onlineDate = 'N/A';
+                    warehouseData.forEach(item => {
+                        const channel = item.渠道 || '总上网率';
+                        const rate = item.上网率 === null ? 0 : parseFloat(item.上网率);
+                        if (rate > 0) {
+                            if (!onlineRateByChannelMap.has(channel)) {
+                                onlineRateByChannelMap.set(channel, rate);
+                            } else {
+                                onlineRateByChannelMap.set(channel, Math.max(onlineRateByChannelMap.get(channel), rate));
+                            }
+                            onlineDate = item.上网率日期 ? new Date(item.上网率日期).toLocaleDateString() : 'N/A';
+                        }
+                    });
+                    let onlineRateHtml = '';
+                    onlineRateByChannelMap.forEach((rate, channel) => {
+                        // 检查上网率是否低于98%，添加颜色标记
+                        const rateValue = parseFloat(rate);
+                        const rateClass = rateValue < 98 ? 'rate-warning' : '';
+                        onlineRateHtml += `<p>${channel}: <span class="${rateClass}">${rate.toFixed(2)}%</span></p>`;
+                    });
+                    if (onlineRateHtml === '') {
+                        onlineRateHtml = 'N/A';
+                    }
+                    
+                    // 处理妥投率，分渠道展示，处理 null 为 0
+                    const deliverySuccessRateByChannelMap = new Map();
+                    let deliverySuccessDate = 'N/A';
+                    warehouseData.forEach(item => {
+                        const channel = item.渠道 || '总妥投率';
+                        const rate = item.妥投率 === null ? 0 : parseFloat(item.妥投率);
+                        if (rate > 0) {
+                            if (!deliverySuccessRateByChannelMap.has(channel)) {
+                                deliverySuccessRateByChannelMap.set(channel, rate);
+                            } else {
+                                deliverySuccessRateByChannelMap.set(channel, Math.max(deliverySuccessRateByChannelMap.get(channel), rate));
+                            }
+                            deliverySuccessDate = item.妥投率日期 ? new Date(item.妥投率日期).toLocaleDateString() : 'N/A';
+                        }
+                    });
+                    let deliverySuccessRateHtml = '';
+                    deliverySuccessRateByChannelMap.forEach((rate, channel) => {
+                        // 检查妥投率是否低于95%，添加颜色标记
+                        const rateValue = parseFloat(rate);
+                        const rateClass = rateValue < 95 ? 'rate-warning' : '';
+                        deliverySuccessRateHtml += `<p>${channel}: <span class="${rateClass}">${rate.toFixed(2)}%</span></p>`;
+                    });
+                    if (deliverySuccessRateHtml === '') {
+                        deliverySuccessRateHtml = 'N/A';
+                    }
+                    
+                    // 检查出库率是否低于100%，添加颜色标记
+                    const deliveryRateClass = parseFloat(deliveryRate1) < 100? 'rate-warning' : '';
+                
+                    // 检查上架率是否低于100%，添加颜色标记
+                    const shelfRateClass = parseFloat(shelfRate) < 100 ? 'rate-warning' : '';
+                    
+                    // 更新仓库统计内容
+                    const warehouseStats = document.getElementById('warehouseStats');
+                    warehouseStats.innerHTML = `
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-content">
+                                    <span class="stat-label">出库日期:</span>
+                                    <span class="stat-value">${deliveryDate}</span>
+                                    <div class="stat-value-large">
+                                        <span class="stat-label">出库率:</span>
+                                        <span class="stat-value ${deliveryRateClass}">${deliveryRate1}%</span>
+                                    </div>
+                                </div>
+                            </div>
+            
+                            <div class="stat-card">
+                                <div class="stat-header">
+                                    <span class="stat-label">上网率出库日期:</span>
+                                    <span class="stat-value">${onlineDate}</span>
+                                </div>
+                                <div class="stat-content">
+                                    <span class="stat-label">上网率:</span>
+                                    <div class="stat-value-multi">${onlineRateHtml}</div>
+                                </div>
+                            </div>
+            
+                            <div class="stat-card">
+                                <div class="stat-header">
+                                    <span class="stat-label">妥投率出库日期:</span>
+                                    <span class="stat-value">${deliverySuccessDate}</span>
+                                </div>
+                                <div class="stat-content">
+                                    <span class="stat-label">妥投率:</span>
+                                    <div class="stat-value-multi">${deliverySuccessRateHtml}</div>
+                                </div>
+                            </div>
+            
+                            <div class="stat-card">
+                                <div class="stat-header">
+                                    <span class="stat-label">实际到仓时间:</span>
+                                    <span class="stat-value">${shelfDate}</span>
+                                </div>
+                                <div class="stat-content">
+                                    <span class="stat-label">上架率:</span>
+                                    <span class="stat-value-large ${shelfRateClass}">${shelfRate}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // 更新所有显示的数据
+                function updateDisplayedData() {
+                    updateDisplayedStatsData();
+                    updateDisplayedErrorData();
+                }
+                
+                // 格式化日期为 YYYY-MM-DD
+                function formatDate(date) {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+            
+                // 格式化日期为 datetime-local 输入框所需格式
+                function formatDateForInput(dateString) {
+                    if (!dateString) return '';
+                    
+                    const date = new Date(dateString);
+                    const offset = date.getTimezoneOffset();
+                    date.setMinutes(date.getMinutes() - offset);
+                    
+                    return date.toISOString().slice(0, 16);
+                }
+            
+                // 打开编辑模态框
+                function openEditModal(error) {
+                    const modal = document.getElementById('editErrorModal');
+                    const form = document.getElementById('editErrorForm');
+                    
+                    // 清空表单数据，防止缓存
+                    form.reset();
+                    
+                    // 填充表单数据
+                    document.getElementById('errorId').value = error.id;
+                    document.getElementById('expectedResolveTime').value = formatDateForInput(error.预计解决时间);
+                    document.getElementById('lastHandler').value = error.最后处理人 || '';
+                    document.getElementById('upgradedHandler').value = error.升级处理人 || '';
+                    document.getElementById('isResolved').value = error.是否解决 ? 'true' : 'false';
+                    
+                    // 设置历史备注 - 保持完整的历史备注信息
+                    document.getElementById('existingRemarks').value = error.备注 || '';
+                    
+                    // 清空附件预览
+                    document.getElementById('attachmentPreview').innerHTML = '';
+                    
+                    // 显示模态框
+                    modal.style.display = 'block';
+                    
+                    // 阻止背景滚动
+                    document.body.style.overflow = 'hidden';
+                    
+                    // 根据"是否解决"状态设置附件上传区域的显示
+                    const isResolved = error.是否解决;
+                    const attachmentFiles = document.getElementById('attachmentFiles');
+                    const attachmentError = document.getElementById('attachmentError');
+                    
+                    if (isResolved) {
+                        attachmentFiles.setAttribute('required', 'required');
+                        attachmentError.style.display = 'block';
+                    } else {
+                        attachmentFiles.removeAttribute('required');
+                        attachmentError.style.display = 'none';
+                    }
+                }
+            
+                // 关闭编辑模态框
+                function closeEditModal() {
+                    const modal = document.getElementById('editErrorModal');
+                    modal.style.display = 'none';
+                    
+                    // 恢复背景滚动
+                    document.body.style.overflow = '';
+                    
+                    // 清空附件选择
+                    document.getElementById('attachmentFiles').value = '';
+                    document.getElementById('attachmentPreview').innerHTML = '';
+                }
+            
+                // 提交编辑表单
+                async function submitEditForm(event) {
+                    event.preventDefault();
+                    
+                    const form = document.getElementById('editErrorForm');
+                    const isResolved = document.getElementById('isResolved').value === 'true';
+                    const attachmentFiles = document.getElementById('attachmentFiles');
+                    
+                    // 验证：如果选择"是"解决，必须上传附件
+                    if (isResolved && (!attachmentFiles.files || attachmentFiles.files.length === 0)) {
+                        alert('选择"是"解决时必须上传附件');
+                        document.getElementById('attachmentError').style.display = 'block';
+                        return;
+                    }
+                    
+                    // 从localStorage获取当前用户名（用于备注记录）
+                    const username = localStorage.getItem('username') || '系统用户';
+                    
+                    // 获取现有备注
+                    const existingRemarks = form.querySelector('[name="existingRemarks"]').value;
+                    
+                    // 获取新增备注
+                    const newRemark = form.querySelector('[name="newRemark"]').value.trim();
+                    
+                    // 获取最后处理人
+                    const lastHandler = form.querySelector('[name="最后处理人"]').value;
+                    
+                    // 准备新的备注内容
+                    let combinedRemarks = existingRemarks;
+                    
+                    // 如果有新的备注，添加到现有备注后面
+                    if (newRemark) {
+                        // 获取当前时间
+                        const now = new Date();
+                        const timestamp = now.toLocaleString();
+                        
+                        // 构建新的备注行
+                        let newRemarkLine = `${username} - ${timestamp}\n${newRemark}`;
+                        
+                        // 如果是解决状态，添加解决信息
+                        if (isResolved) {
+                            newRemarkLine += `\n编辑时间: ${timestamp}\n是否解决: 是`;
+                        }
+                        
+                        // 将新备注添加到现有备注后
+                        if (combinedRemarks) {
+                            combinedRemarks += `\n\n${newRemarkLine}`;
+                        } else {
+                            combinedRemarks = newRemarkLine;
+                        }
+                    }
+                    
+                    // 准备数据
+                    const data = {
+                        id: form.querySelector('[name="id"]').value,
+                        预计解决时间: form.querySelector('[name="预计解决时间"]').value,
+                        最后处理人: lastHandler,
+                        升级处理人: form.querySelector('[name="升级处理人"]').value,
+                        是否解决: isResolved,
+                        备注: combinedRemarks
+                    };
+                    
+                    // 显示加载状态
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    const originalText = submitBtn.textContent;
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = '保存中...';
+                    
+                   try {
+                        // 修改：无论是否解决，只要有选择附件就上传
+                        let attachmentUrls = [];
+                        if (attachmentFiles.files && attachmentFiles.files.length > 0) {
+                            const formData = new FormData();
+                            formData.append('id', data.id);
+                            // 修改：根据解决状态设置type参数
+                            formData.append('type', isResolved ? '解决' : '跟进');
+                            
+                            for (let i = 0; i < attachmentFiles.files.length; i++) {
+                                formData.append('files', attachmentFiles.files[i]);
+                            }
+                            
+                            const attachmentResponse = await fetch('/uploadFile', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            
+                            if (!attachmentResponse.ok) {
+                                throw new Error(`上传附件失败，状态码: ${attachmentResponse.status}`);
+                            }
+                            
+                            const attachmentResult = await attachmentResponse.json();
+                            if (!attachmentResult.success) {
+                                throw new Error(`上传附件失败: ${attachmentResult.error}`);
+                            }
+                            
+                            attachmentUrls = attachmentResult.files;
+                            
+                            // 如果有附件上传成功，添加到备注中
+                            if (attachmentUrls.length > 0) {
+                                // 获取当前时间
+                                const now = new Date();
+                                const timestamp = now.toLocaleString();
+                                
+                                // 构建附件备注行，格式与其他备注保持一致
+                                const attachmentNote = `${username} - ${timestamp}\n上传附件: ${attachmentUrls.length}个文件 (${isResolved ? '解决' : '跟进'})`;
+                                
+                                // 添加到备注中
+                                data.备注 += `\n\n${attachmentNote}`;
+                            }
+                        }
+                        
+                        // 更新异常数据
+                        const response = await fetch('/updata_error', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(data)
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`更新异常数据失败，状态码: ${response.status}`);
+                        }
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            alert('异常信息更新成功');
+                            closeEditModal();
+                            fetchErrorData(); // 重新加载异常数据
+                        } else {
+                            alert(`更新失败: ${result.error}`);
+                        }
+                    } catch (error) {
+                        console.error('更新异常数据时出错:', error);
+                        alert('更新异常数据时出错，请稍后重试。');
+                    } finally {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = originalText;
+                    }
+                }
+            
+                // 提取备注中的用户名和备注内容，忽略时间戳和解决信息
+                function simplifyRemarks(fullRemarks) {
+                    if (!fullRemarks) return '';
+                    
+                    // 按双换行符分割多个备注
+                    const remarkBlocks = fullRemarks.split('\n\n');
+                    const simplifiedRemarks = [];
+                    
+                    remarkBlocks.forEach(block => {
+                        // 按单换行符分割用户名+时间戳和备注内容
+                        const lines = block.split('\n');
+                        
+                        if (lines.length >= 2) {
+                            // 第一行是用户名和时间戳，格式为 "用户名 - 时间戳"
+                            const userLine = lines[0];
+                            // 提取用户名
+                            const userMatch = userLine.match(/^([^-]+)-/);
+                            const username = userMatch ? userMatch[1].trim() : '未知用户';
+                            
+                            // 从第二行开始是备注内容
+                            const remarkContent = lines.slice(1).join('\n');
+                            
+                            // 添加到简化后的备注中
+                            simplifiedRemarks.push(`${username}: ${remarkContent}`);
+                        }
+                    });
+                    
+                    // 将所有简化后的备注用换行符连接
+                    return simplifiedRemarks.join('\n');
+                }
+            
+                // 新增：初始化附件上传功能
+                document.addEventListener('DOMContentLoaded', function() {
+                    // 监听"是否解决"选择变化
+                    const isResolvedSelect = document.getElementById('isResolved');
+                    const attachmentFiles = document.getElementById('attachmentFiles');
+                    const attachmentError = document.getElementById('attachmentError');
+                    
+                    isResolvedSelect.addEventListener('change', function() {
+                        if (this.value === 'true') {
+                            // 如果选择"是"解决，添加required属性
+                            attachmentFiles.setAttribute('required', 'required');
+                            attachmentError.style.display = 'block';
+                        } else {
+                            // 如果选择"否"解决，移除required属性
+                            attachmentFiles.removeAttribute('required');
+                            attachmentError.style.display = 'none';
+                        }
+                    });
+                    
+                    // 监听文件选择变化，显示预览
+                    attachmentFiles.addEventListener('change', function() {
+                        const preview = document.getElementById('attachmentPreview');
+                        preview.innerHTML = '';
+                        
+                        if (this.files && this.files.length > 0) {
+                            for (let i = 0; i < this.files.length; i++) {
+                                const file = this.files[i];
+                                const fileItem = document.createElement('div');
+                                fileItem.className = 'file-item';
+                                
+                                // 检查是否为图片
+                                if (file.type.startsWith('image/')) {
+                                    const img = document.createElement('img');
+                                    img.src = URL.createObjectURL(file);
+                                    img.className = 'preview-image';
+                                    img.style.maxWidth = '100px';
+                                    img.style.maxHeight = '100px';
+                                    fileItem.appendChild(img);
+                                }
+                                
+                                const fileName = document.createElement('span');
+                                fileName.textContent = file.name;
+                                fileItem.appendChild(fileName);
+                                
+                                preview.appendChild(fileItem);
+                            }
+                        }
+                    });
+                });
+            
+                // 移动端菜单切换
+                document.getElementById('menuToggle').addEventListener('click', function() {
+                    const sidebar = document.getElementById('sidebar');
+                    sidebar.classList.toggle('hidden');
+                    sidebar.classList.toggle('absolute');
+                    sidebar.classList.toggle('z-20');
+                    sidebar.classList.toggle('h-full');
+                    sidebar.classList.toggle('w-64');
+                });
+            
+                // 关闭模态框事件
+                document.getElementById('closeModal').addEventListener('click', closeEditModal);
+                document.getElementById('cancelEdit').addEventListener('click', closeEditModal);
+            
+                // 编辑表单提交事件
+                document.getElementById('editErrorForm').addEventListener('submit', submitEditForm);
+            
+                // 点击模态框外部关闭
+                window.addEventListener('click', function(event) {
+                    const modal = document.getElementById('editErrorModal');
+                    const exportModal = document.getElementById('exportModal');
+                    
+                    if (event.target === modal) {
+                        closeEditModal();
+                    }
+                    
+                    if (event.target === exportModal) {
+                        exportModal.style.display = 'none';
+                        document.body.style.overflow = '';
+                    }
+                });
+            });
+            </script>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

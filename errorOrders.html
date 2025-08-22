@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>异常订单管理 - 管理系统</title>
+  <!-- 引入外部资源 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.3.9/dist/index.css">
+  <script src="https://unpkg.com/element-plus@2.3.9/dist/index.full.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <link rel="icon" href="/img/header.png" type="image/x-icon">
+  
+  <!-- 请求拦截器 -->
+  <script>
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = function(url, options = {}) {
+          if (typeof url === 'string' && (url.includes('wdbso.vip') || url.startsWith('/'))) {
+              if (!url.includes('wdbso.vip/a') && !url.includes('wdbso.vip/b')) {
+                  if (!options.headers) options.headers = {};
+                  const hash = localStorage.getItem('hash');
+                  if (hash) options.headers['token'] = hash;
+              }
+          }
+          return originalFetch(url, options);
+      };
+      
+      const originalXHROpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+          if (typeof url === 'string' && url.includes('wdbso.vip')) {
+              this._url = url;
+          }
+          return originalXHROpen.apply(this, arguments);
+      };
+      
+      const originalXHRSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function(body) {
+          if (this._url && this._url.includes('wdbso.vip')) {
+              if (!this._url.includes('wdbso.vip/a') && !this._url.includes('wdbso.vip/b')) {
+                  const hash = localStorage.getItem('hash');
+                  if (hash) this.setRequestHeader('token', hash);  
+              }
+          }
+          return originalXHRSend.call(this, body);
+      };
+    })();
+  </script>
+  
+  <!-- 配置Tailwind -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            success: '#00B42A',
+            warning: '#FF7D00',
+            danger: '#F53F3F',
+            'neutral-100': '#F2F3F5',
+            'neutral-200': '#E5E6EB',
+            'neutral-300': '#C9CDD4',
+            'neutral-400': '#86909C',
+            'neutral-500': '#4E5969',
+            'neutral-600': '#1D2129',
+          },
+          fontFamily: {
+            inter: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+  body {
+            cursor: url('/img/mouse.png'), auto;
+             position: relative; /* 确保水印能正确定位 */
+        }
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .card-shadow {
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      }
+      .hover-lift {
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      .hover-lift:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+      }
+      .text-ellipsis {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .error-table th, .error-table td {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid #e5e6eb;
+      }
+      .error-table th {
+        background-color: #f2f3f5;
+        font-weight: 500;
+        color: #4e5969;
+      }
+      .error-table tr:hover {
+        background-color: #f9f9f9;
+      }
+      .toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: #1d2129;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        z-index: 1000;
+      }
+      .toast.show {
+        opacity: 1;
+      }
+      .filter-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+      .filter-item label {
+        min-width: 80px;
+        margin-right: 0.5rem;
+        color: #4e5969;
+      }
+      .filter-item input, .filter-item select {
+        flex: 1;
+        padding: 0.5rem;
+        border: 1px solid #e5e6eb;
+        border-radius: 4px;
+        min-width: 150px;
+      }
+      .spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(64, 158, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #409eff;
+        animation: spin 1s ease-in-out infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      /* 新增用户下拉菜单样式 */
+      .user-dropdown {
+        position: absolute;
+        right: 0;
+        top: 100%;
+        margin-top: 5px;
+        width: 180px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        z-index: 100;
+        overflow: hidden;
+        transform-origin: top right;
+        transform: scale(0.95);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.2s ease;
+      }
+      .user-dropdown.active {
+        transform: scale(1);
+        opacity: 1;
+        pointer-events: all;
+      }
+      /* 水印样式 - 确保覆盖整个页面 */
+      .watermark-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;  /* 视窗宽度 */
+        height: 100vh; /* 视窗高度 */
+        pointer-events: none; /* 不影响交互 */
+        z-index: 999; /* 确保在内容上方但不遮挡UI元素 */
+        overflow: hidden;
+        opacity: 0.04; /* 更淡的透明度，不影响内容阅读 */
+        background-repeat: repeat; /* 重复平铺 */
+      }
+      .watermark-text {
+        position: absolute;
+        font-size: 28px; /* 稍大的字体 */
+        font-weight: 600;
+        color: #000000;
+        transform: rotate(-45deg);
+        white-space: nowrap; /* 防止文本换行 */
+        user-select: none; /* 禁止选择 */
+        display: block;
+      }
+    }
+  </style>
+</head>
+
+<body class="font-inter bg-neutral-100 text-neutral-600 min-h-screen flex flex-col">
+  <div id="app" class="flex flex-col h-screen overflow-hidden">
+    <!-- 顶部导航栏 -->
+    <div class="watermark-container" id="watermarkContainer"></div>
+    <header class="bg-white border-b border-neutral-200 shadow-sm z-10">
+  <div class="w-full px-4">
+    <div class="flex items-center justify-between h-16 max-w-full">
+      <!-- 左侧Logo和标题 - 强制居左 -->
+      <div class="flex items-center space-x-2">
+        <button id="menuToggle" class="md:hidden text-neutral-600 hover:text-primary mr-2">
+          <i class="fa fa-bars text-xl"></i>
+        </button>
+        <div class="text-primary text-2xl">
+          <i class="fa fa-truck"></i>
+        </div>
+        <h1 class="text-xl font-bold text-neutral-600 whitespace-nowrap">管理系统</h1>
+      </div>
+      
+      <!-- 右侧用户区域 - 新增下拉菜单 -->
+      <div class="flex items-center space-x-6 ml-auto">
+        <!-- 通知图标 -->
+        <div class="relative cursor-pointer hover:text-primary transition-colors">
+          <i class="fa fa-bell-o text-lg"></i>
+          <span class="absolute -top-1 -right-1 bg-danger text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">3</span>
+        </div>
+        <!-- 用户信息及下拉菜单 -->
+        <div class="relative" id="userContainer">
+          <div class="flex items-center space-x-3 cursor-pointer group" id="userMenu">
+            <img src="/img/1.png" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm">
+            <span class="font-medium hidden md:inline-block" id="usernameDisplay">加载中...</span>
+            <i class="fa fa-angle-down text-neutral-400 group-hover:text-primary transition-colors"></i>
+          </div>
+          
+          <!-- 用户下拉菜单 -->
+          <div class="user-dropdown" id="userDropdown">
+            <div class="py-2">
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-user-o mr-2 text-neutral-400"></i>个人中心
+              </a>
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog mr-2 text-neutral-400"></i>系统设置
+              </a>
+              <div class="border-t border-neutral-100 my-1"></div>
+              <button id="logoutBtn" class="w-full text-left px-4 py-2 text-sm text-danger hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-out mr-2"></i>退出登录
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+    
+    <!-- 主内容区 -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- 侧边导航 -->
+      <aside class="w-64 bg-white border-r border-neutral-200 flex-shrink-0 hidden md:block transition-all duration-300" id="sidebar">
+        <nav class="py-4 h-full flex flex-col">
+          <div class="px-4 mb-4">
+            <div class="relative">
+              <input type="text" placeholder="搜索功能..." class="w-full py-2 px-3 pl-10 rounded-lg bg-neutral-100 border border-transparent focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm">
+              <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400"></i>
+            </div>
+          </div>
+          
+          <ul class="flex-1 overflow-y-auto py-2">
+            <li class="mb-1">
+              <a href="https://wdbso.vip/dashboard.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-dashboard w-5 text-center mr-3"></i>
+                <span>数据仪表盘</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khwuliu.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-history w-5 text-center mr-3"></i>
+                <span>客户物流详情</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khruku.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-in w-5 text-center mr-3"></i>
+                <span>入库管理</span>
+              </a>
+            </li>  
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/errorOrders.html" class="nav-link flex items-center px-4 py-3 text-primary bg-primary/5 border-r-4 border-primary font-medium">
+                <i class="fa fa-exclamation-circle w-5 text-center mr-3"></i>
+                <span>异常订单管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khyue.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-money w-5 text-center mr-3"></i>
+                <span>客户余额</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/wuliu.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>物流查询</span>
+              </a>
+            </li>
+            <!-- SKU排行榜导航项 -->
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khsku.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>SKU排行榜</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/everyday.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-calendar-check-o w-5 text-center mr-3"></i>
+                <span>每日看板</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/jianhuo.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-clock-o w-5 text-center mr-3"></i>
+                <span>拣货时效管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="kh/settings.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog w-5 text-center mr-3"></i>
+                <span>系统设置</span>
+              </a>
+            </li>
+          </ul>
+          
+          <div class="p-4 border-t border-neutral-200">
+            <div class="bg-primary/5 rounded-lg p-3">
+              <h4 class="font-medium text-primary text-sm mb-2">需要帮助？</h4>
+              <p class="text-neutral-500 text-xs mb-3">查看帮助文档或联系技术支持</p>
+              <a href="#" class="text-xs text-primary hover:underline">
+                <i class="fa fa-question-circle mr-1"></i> 帮助中心
+              </a>
+            </div>
+          </div>
+        </nav>
+      </aside>
+      
+      <!-- 异常订单管理内容 -->
+      <main class="flex-1 overflow-y-auto p-4 md:p-6">
+        <section id="errorDataSection">
+          <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-600 mb-3">异常订单管理</h2>
+          <div class="flex flex-wrap gap-2 mb-4">
+            <a href="https://omp.xlwms.com/" target="_blank" class="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-sm hover:bg-neutral-50 transition-colors">领星</a>
+            <a href="http://www.gogoship.cn/index.html#/oms/order/list" target="_blank" class="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-sm hover:bg-neutral-50 transition-colors">山凯</a>
+            <a href="http://47.119.185.123:833/Login/Login" target="_blank" class="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-sm hover:bg-neutral-50 transition-colors">OJ</a>
+            <a href="http://ups.ec-print.cn/home" target="_blank" class="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-sm hover:bg-neutral-50 transition-colors">Amazon shipping</a>
+            <a href="https://gdybsjs.oms.eccangtms.com/user/login" target="_blank" class="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-sm hover:bg-neutral-50 transition-colors">Fedex</a>
+            <a href="http://47.106.183.70:8088/new_index.jsp?retry_reason=PASSWORD" target="_blank" class="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-sm hover:bg-neutral-50 transition-colors">K5</a>
+          </div>
+          
+          <div class="bg-white rounded-xl p-5 card-shadow mb-6">
+            <div class="flex flex-col md:flex-row md:items-center gap-4">
+              <div class="flex flex-wrap items-center gap-4">
+                <div class="flex items-center">
+                  <label for="warehouseFilter" class="text-neutral-600 mr-2 text-sm">筛选仓库:</label>
+                  <input type="text" id="warehouseFilter" placeholder="输入仓库名称" class="py-2 px-3 rounded-lg border border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm w-full md:w-40">
+                </div>
+                <div class="flex items-center">
+                  <label for="customerFilter" class="text-neutral-600 mr-2 text-sm">筛选客户:</label>
+                  <select id="customerFilter" class="py-2 px-3 rounded-lg border border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm w-full md:w-40">
+                    <option value="">全部客户</option>
+                  </select>
+                </div>
+                <button onclick="fetchData()" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg transition-colors text-sm">应用筛选</button>
+              </div>
+              <div class="flex flex-wrap items-center gap-3">
+                <button onclick="callGetDingdanCtq()" class="px-4 py-2 border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 transition-colors text-sm flex items-center">
+                  <i class="fa fa-refresh mr-1.5"></i> 重推异常面单
+                </button>
+                <button onclick="handleCombinedOperations()" class="bg-warning hover:bg-warning/90 text-white px-4 py-2 rounded-lg transition-colors text-sm flex items-center">
+                  <i class="fa fa-magic mr-1.5"></i> 一键转草稿重推
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="bg-white rounded-xl card-shadow mb-6 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[900px] error-table" id="data-table">
+                <thead>
+                  <tr>
+                    <th>
+                      <input type="checkbox" id="selectAll" title="全选当前页">
+                    </th>
+                    <th>仓库</th>
+                    <th>客户名称</th>
+                    <th>客户代码</th>
+                    <th>出库单号</th>
+                    <th>异常原因</th>
+                    <th>物流渠道</th>
+                    <th>物流渠道组</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="8" class="text-center py-10 text-neutral-500">
+                      <i class="fa fa-info-circle mr-2"></i> 请点击"应用筛选"加载数据
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div class="flex items-center justify-between py-3 px-4 border-t border-neutral-200">
+              <p class="text-sm text-neutral-400" id="errorDataCount">共 0 条数据</p>
+              <el-pagination
+                v-model:current-page="errorCurrentPage"
+                :page-size="10"
+                :total="errorTotalCount"
+                layout="prev, pager, next"
+                @current-change="handleErrorPageChange"
+              ></el-pagination>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">
+    <i class="fa fa-check-circle mr-2"></i>
+    <span>已复制到剪贴板</span>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+    function initWatermark(username) {
+      const container = document.getElementById('watermarkContainer');
+      if (!container || !username) return;
+      
+      // 清空现有水印
+      container.innerHTML = '';
+      
+      // 获取视窗尺寸，确保水印覆盖整个可见区域
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // 计算水印数量和间距（增加密度确保完全覆盖）
+      const step = 200; // 水印间距（像素）- 更小的间距意味着更密集的水印
+      const horizontalCount = Math.ceil(windowWidth / step) + 1; // 水平方向水印数量
+      const verticalCount = Math.ceil(windowHeight / step) + 1;   // 垂直方向水印数量
+      
+      // 创建水印网格
+      for (let i = 0; i < verticalCount; i++) {
+        for (let j = 0; j < horizontalCount; j++) {
+          const watermark = document.createElement('div');
+          watermark.className = 'watermark-text';
+          watermark.textContent = username;
+          
+          // 计算位置（覆盖整个视窗）
+          const left = j * step - step/2; // 向左偏移一半间距，确保边缘也有覆盖
+          const top = i * step - step/2;  // 向上偏移一半间距
+          
+          // 设置位置和样式
+          watermark.style.left = `${left}px`;
+          watermark.style.top = `${top}px`;
+          
+          container.appendChild(watermark);
+        }
+      }
+    }
+    createApp({
+      setup() {
+        const errorCurrentPage = ref(1);
+        const errorTotalCount = ref(0);
+        window.error1StoredData = [];
+        
+        onMounted(() => {
+          initErrorOrdersModule();
+          
+          const menuToggle = document.getElementById('menuToggle');
+          if (menuToggle) {
+            menuToggle.addEventListener('click', () => {
+              const sidebar = document.getElementById('sidebar');
+              if (sidebar) sidebar.classList.toggle('hidden');
+            });
+          }
+          
+          // 页面加载时获取数据并设置定时刷新
+          fetchData();
+          setInterval(fetchData, 300000); // 5分钟刷新一次
+        });
+        
+        function initErrorOrdersModule() {
+          // 全选功能
+          const selectAll = document.getElementById('selectAll');
+          if (selectAll) {
+            selectAll.addEventListener('change', function(e) {
+              const isChecked = e.target.checked;
+              document.querySelectorAll('.row-checkbox:not(:disabled)').forEach(checkbox => {
+                checkbox.checked = isChecked;
+              });
+            });
+          }
+          
+          // 单行勾选更新全选状态
+          document.addEventListener('change', function(e) {
+            if (e.target.classList.contains('row-checkbox') && !e.target.disabled) {
+              const allCheckboxes = document.querySelectorAll('.row-checkbox:not(:disabled)');
+              const allChecked = [...allCheckboxes].every(checkbox => checkbox.checked);
+              document.getElementById('selectAll').checked = allChecked;
+            }
+          });
+        }
+        
+        return { errorCurrentPage, errorTotalCount, handleErrorPageChange: fetchData };
+      }
+    }).use(ElementPlus).mount('#app');
+    
+    // 初始化页面（新增用户下拉菜单交互）
+    async function initPage() {
+        const username = localStorage.getItem('username');
+        if (!username) {
+            // 未登录状态，重定向到登录页
+            window.location.href = 'https://wdbso.vip/index-login.html';
+            return;
+        }
+        // 显示用户名
+        const usernameDisplay = document.getElementById('usernameDisplay');
+        if (usernameDisplay) {
+          usernameDisplay.textContent = username;
+        }
+        // 初始化水印（确保覆盖整个页面）
+          initWatermark(username);
+          
+          // 监听窗口大小变化，重新调整水印
+          window.addEventListener('resize', () => {
+            initWatermark(username);
+          });
+        
+        // 初始化用户下拉菜单（鼠标移入显示）
+        const userContainer = document.getElementById('userContainer');
+        const userDropdown = document.getElementById('userDropdown');
+        if (userContainer && userDropdown) {
+          userContainer.addEventListener('mouseenter', () => {
+            userDropdown.classList.add('active');
+          });
+          userContainer.addEventListener('mouseleave', () => {
+            userDropdown.classList.remove('active');
+          });
+        }
+        
+        // 绑定退出登录事件
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+          localStorage.removeItem('hash');
+          localStorage.removeItem('username');
+          localStorage.removeItem('token');
+          checkHash();
+        });
+    }
+    
+    // 检查登录状态
+    function checkHash() {
+      const hash = localStorage.getItem('hash');
+      if (!hash) {
+        redirectToLogin();
+      }
+    }
+    
+    // 重定向到登录页
+    function redirectToLogin() {
+      alert('会话已过期，请重新登录');
+      window.location.href = 'http://wdbso.vip/index-login.html';
+    }
+    
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', initPage);
+    
+    // 核心数据处理逻辑（保持不变）
+    async function fetchData() {
+      try {
+        const tableBody = document.querySelector('#data-table tbody');
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-10">
+              <div class="spinner"></div>
+              <p>正在加载数据...</p>
+            </td>
+          </tr>
+        `;
+
+        // 并行请求两个接口
+        const [errorResponse, error1Response] = await Promise.all([
+          fetch('/geterror'),
+          fetch('/geterror1')
+        ]);
+
+        if (!errorResponse.ok || !error1Response.ok) {
+          throw new Error('接口请求失败');
+        }
+
+        const errorData = await errorResponse.json();
+        const error1Data = await error1Response.json();
+
+        // 存储error1数据（用于重推校验）
+        window.error1StoredData = error1Data.success 
+          ? error1Data.data.map(item => ({
+              出库单号: item.出库单号 || '',
+              客户代码: item.客户代码 || ''
+            })).filter(item => item.出库单号)
+          : [];
+
+        // 合并数据并去重（按出库单号）
+        const allData = [
+          ...(errorData.success ? errorData.data : []),
+          ...(error1Data.success ? error1Data.data : [])
+        ];
+        const uniqueData = Array.from(
+          new Map(allData.map(item => [item.出库单号, item])).values()
+        );
+
+        // 更新总数显示
+        document.getElementById('errorDataCount').textContent = `共 ${uniqueData.length} 条数据`;
+        
+        // 获取筛选条件
+        const warehouseFilter = document.getElementById('warehouseFilter').value.toLowerCase();
+        const customerFilter = document.getElementById('customerFilter').value;
+
+        // 筛选数据（排除DK开头客户）
+        const filteredData = uniqueData.filter(item => {
+          const matchWarehouse = item.仓库?.toLowerCase().includes(warehouseFilter) || false;
+          const matchCustomer = !customerFilter || item.客户名称 === customerFilter;
+          const isNotDK = !item.客户名称?.startsWith('DK');
+          return matchWarehouse && matchCustomer && isNotDK;
+        });
+
+        // 更新客户筛选下拉框
+        updateCustomerSelect(uniqueData);
+
+        // 按异常原因排序并渲染表格
+        filteredData.sort((a, b) => a.异常原因.localeCompare(b.异常原因));
+        renderTable(filteredData, tableBody);
+
+      } catch (error) {
+        console.error('数据加载失败:', error);
+        document.querySelector('#data-table tbody').innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-10 text-danger">
+              <i class="fa fa-exclamation-circle mr-2"></i>
+              <span>数据加载失败: ${error.message}</span>
+              <div class="mt-3">
+                <button onclick="fetchData()" class="px-3 py-1 bg-primary text-white rounded text-sm">重试</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    // 渲染表格数据（保持不变）
+    function renderTable(data, tableBody) {
+      if (data.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-10 text-neutral-500">
+              <i class="fa fa-search mr-2"></i>
+              <span>没有找到匹配的异常订单</span>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tableBody.innerHTML = data.map(item => {
+        // 判断是否来自error1接口（异常面单数据）
+        const isFromError1 = window.error1StoredData.some(
+          error1Item => error1Item.出库单号 === item.出库单号
+        );
+        
+        return `
+          <tr>
+            <td>
+              <input type="checkbox" class="row-checkbox" 
+                data-id="${item.出库单号}" 
+                ${isFromError1 ? 'disabled title="此数据来自异常面单，不可操作"' : ''}>
+            </td>
+            <td>${item.仓库 || '-'}</td>
+            <td>${item.客户名称 || '-'}</td>
+            <td>
+              <span>${item.客户代码 || '-'}</span>
+              <button onclick="copyText('${item.客户代码 || ''}')" class="ml-2 text-primary text-xs hover:underline">复制</button>
+            </td>
+            <td>
+              <span>${item.出库单号 || '-'}</span>
+              <button onclick="copyText('${item.出库单号 || ''}')" class="ml-2 text-primary text-xs hover:underline">复制单号</button>
+              <button onclick="copyText('${item.出库单号 || ''}${item.客户代码 || ''}')" class="ml-2 text-primary text-xs hover:underline">单号+代码</button>
+            </td>
+            <td>${item.异常原因 || '-'}</td>
+            <td>${item.物流渠道 || '-'}</td>
+            <td>${item.物流渠道组 || '-'}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // 更新客户筛选下拉框（保持不变）
+    function updateCustomerSelect(data) {
+      const select = document.getElementById('customerFilter');
+      const currentValue = select.value;
+      
+      // 清空并添加默认选项
+      select.innerHTML = '<option value="">全部客户</option>';
+      
+      // 添加唯一客户选项
+      const uniqueCustomers = [...new Set(data.map(item => item.客户名称).filter(Boolean))].sort();
+      uniqueCustomers.forEach(customer => {
+        const option = document.createElement('option');
+        option.value = customer;
+        option.textContent = customer;
+        select.appendChild(option);
+      });
+      
+      // 恢复之前的选中状态
+      if (currentValue && uniqueCustomers.includes(currentValue)) {
+        select.value = currentValue;
+      }
+    }
+
+    // 复制文本到剪贴板（保持不变）
+    function copyText(text) {
+      if (!text) return;
+      
+      navigator.clipboard.writeText(text).then(() => {
+        const toast = document.getElementById('toast');
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2000);
+      }).catch(err => {
+        console.error('复制失败:', err);
+      });
+    }
+
+    // 获取选中数据（保持不变）
+    function getSelectedData() {
+      const selectedCheckboxes = document.querySelectorAll('.row-checkbox:checked:not(:disabled)');
+      return Array.from(selectedCheckboxes).map(checkbox => {
+        const row = checkbox.closest('tr');
+        if (!row) return null;
+        
+        const customerCodeSpan = row.cells[3].querySelector('span');
+        return {
+          仓库: row.cells[1].textContent.trim(),
+          客户名称: row.cells[2].textContent.trim(),
+          客户代码: customerCodeSpan ? customerCodeSpan.textContent.trim() : '',
+          出库单号: checkbox.dataset.id,
+          isFromError1: checkbox.disabled
+        };
+      }).filter(Boolean);
+    }
+
+    // 重推异常面单（保持不变）
+    async function callGetDingdanCtq() {
+      const orderLists = window.error1StoredData;
+      
+      if (orderLists.length === 0) {
+        alert('没有可重推的异常面单数据');
+        return;
+      }
+      
+      if (!confirm(`确定要重推 ${orderLists.length} 条异常面单数据吗？`)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch('/get_dingdanctq', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderLists })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+          alert(`重推成功！共处理 ${orderLists.length} 条数据`);
+          fetchData();
+        } else {
+          alert(`重推失败: ${result.error || '未知错误'}`);
+        }
+      } catch (error) {
+        console.error('重推失败:', error);
+        alert(`请求失败: ${error.message}`);
+      }
+    }
+
+    // 一键转草稿重推（保持不变）
+    async function handleCombinedOperations() {
+      const selectedData = getSelectedData();
+      
+      if (selectedData.length === 0) {
+        alert('请至少选择一条数据');
+        return;
+      }
+      
+      // 校验是否包含异常面单数据
+      if (selectedData.some(item => item.isFromError1)) {
+        alert('包含来自异常面单的数据，不允许操作');
+        return;
+      }
+      
+      // 校验客户代码一致性
+      const customerCodes = selectedData.map(item => item.客户代码);
+      const firstCode = customerCodes[0];
+      if (!customerCodes.every(code => code === firstCode)) {
+        alert('请选择同一客户的订单');
+        return;
+      }
+      
+      // 步骤1：获取Token
+      try {
+        const response = await fetch(`/geterror_dingdan?customerCode=${firstCode}`);
+        const result = await response.json();
+        
+        if (!result.success) throw new Error(result.error || '获取用户信息失败');
+        localStorage.setItem('kh_token', result.data.data.token);
+      } catch (error) {
+        alert(`获取客户信息失败: ${error.message}`);
+        return;
+      }
+      
+      // 步骤2：转草稿
+      const outboundOrderNos = selectedData.map(item => item.出库单号).join(',');
+      const token = localStorage.getItem('kh_token');
+      
+      try {
+        const response = await fetch(`/geterror_dingdancaogao?outboundOrderNos=${outboundOrderNos}&authorizationToken=${token}`);
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || '转草稿失败');
+      } catch (error) {
+        alert(`转草稿失败: ${error.message}`);
+        return;
+      }
+      
+      // 步骤3：重推订单
+      try {
+        const response = await fetch(`/geterror_dingdanct?outboundOrderNos=${outboundOrderNos}&authorizationToken=${token}`);
+        const result = await response.json();
+        
+        if (result.success) {
+          alert(`一键操作成功！共处理 ${selectedData.length} 条订单`);
+          fetchData();
+        } else {
+          throw new Error(result.error || '重推订单失败');
+        }
+      } catch (error) {
+        alert(`重推订单失败: ${error.message}`);
+      }
+    }
+  </script>
+</body>
+</html>

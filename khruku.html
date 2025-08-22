@@ -1,0 +1,2071 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>入库管理 - 管理系统</title>
+  <!-- 生产环境资源 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.3.9/dist/index.css">
+  <script src="https://unpkg.com/element-plus@2.3.9/dist/index.full.min.js"></script>
+  <!-- 引入本地中文语言包 -->
+  <script src="/js/chinese.js"></script>
+  <link rel="icon" href="/img/header.png" type="image/x-icon">
+  
+  <!-- 修复Tailwind CSS引入，确保样式正常加载 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            success: '#00B42A',
+            warning: '#FF7D00',
+            danger: '#F53F3F',
+            'neutral-100': '#F2F3F5',
+            'neutral-200': '#E5E6EB',
+            'neutral-300': '#C9CDD4',
+            'neutral-400': '#86909C',
+            'neutral-500': '#4E5969',
+            'neutral-600': '#1D2129',
+          },
+          fontFamily: { inter: ['Inter', 'system-ui', 'sans-serif'] },
+        },
+      }
+    }
+  </script>
+  <style type="text/tailwindcss">
+    body {
+            cursor: url('/img/mouse.png'), auto;
+              position: relative; /* 确保水印能正确定位 */
+        }
+    @layer utilities {
+      .content-auto { content-visibility: auto; }
+      .card-shadow { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); }
+      .hover-lift { transition: transform 0.2s, box-shadow 0.2s; }
+      .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12); }
+      .text-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      
+      /* 用户下拉菜单样式 */
+      .user-dropdown {
+        position: absolute;
+        right: 0;
+        top: 100%;
+        margin-top: 5px;
+        width: 180px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        z-index: 100;
+        overflow: hidden;
+        transform-origin: top right;
+        transform: scale(0.95);
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.2s ease;
+      }
+      .user-dropdown.active {
+        transform: scale(1);
+        opacity: 1;
+        pointer-events: all;
+      }
+      
+      /* 修复提示框优化 - 提高z-index确保显示在最上层 */
+      .custom-tooltip {
+        position: relative;
+        z-index: 1; /* 基础层级 */
+      }
+      .custom-tooltip:hover::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #333;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        z-index: 1000; /* 提高到足够高的层级 */
+        max-width: 400px;
+        width: max-content;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        font-size: 14px;
+        line-height: 1.4;
+        pointer-events: none; /* 允许鼠标穿过提示框操作其他元素 */
+      }
+      .custom-tooltip:hover::before {
+        content: '';
+        position: absolute;
+        bottom: calc(100% - 5px);
+        left: 50%;
+        transform: translateX(-50%);
+        border-width: 5px;
+        border-style: solid;
+        border-color: #333 transparent transparent transparent;
+        z-index: 1000;
+        pointer-events: none;
+      }
+    }
+  </style>
+
+  <!-- 确保Font Awesome正确引用 -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  
+  <!-- 修复xlsx库的加载路径 -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- 请求拦截器 -->
+  <script>
+    (function() {
+      // 保存原始的fetch方法
+      const originalFetch = window.fetch;
+      // 重写fetch方法
+      window.fetch = function(url, options = {}) {
+          if (typeof url === 'string' && (url.includes('wdbso.vip') || url.startsWith('/'))) {
+              // 排除特定路径
+              if (!url.includes('wdbso.vip/a') && !url.includes('wdbso.vip/b')) {
+                  if (!options.headers) {
+                      options.headers = {};
+                  }
+                  const hash = localStorage.getItem('hash');
+                  if (hash) {
+                      options.headers['token'] = hash;
+                  }
+              }
+          }
+          return originalFetch(url, options);
+      };
+      
+      // 重写XMLHttpRequest以拦截AJAX请求
+      const originalXHROpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+          // 检查是否是wdbso.vip域名
+          if (typeof url === 'string' && url.includes('wdbso.vip')) {
+              // 保存url以便在send方法中使用
+              this._url = url;
+          }
+          return originalXHROpen.apply(this, arguments);
+      };
+      
+      const originalXHRSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function(body) {
+          if (this._url && this._url.includes('wdbso.vip')) {
+              // 排除特定路径
+              if (!this._url.includes('wdbso.vip/a') && !this._url.includes('wdbso.vip/b')) {
+                  const hash = localStorage.getItem('hash');
+                  if (hash) {
+                      this.setRequestHeader('token', hash);  
+                  }
+              }
+          }
+          return originalXHRSend.call(this, body);
+      };
+    })();
+  </script>
+
+  <!-- 入库管理页面专用样式 -->
+  <style>
+    #ruku  .edit-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+    }
+    
+    #ruku .modal-content {
+      background: white;
+      margin: 10% auto;
+      padding: 20px;
+      width: 60%;
+      max-width: 800px;
+      border-radius: 8px;
+      position: relative;
+    }
+    
+    #ruku .close-btn {
+      position: absolute;
+      right: 20px;
+      top: 10px;
+      font-size: 28px;
+      cursor: pointer;
+    }
+    
+    #ruku .form-group {
+      margin: 15px 0;
+    }
+    
+    #ruku .form-group label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    
+    #ruku .save-btn {
+      background: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 15px;
+    }
+    
+    /* 表格容器样式 */
+    .table-container {
+      overflow-x: auto;
+      margin: 20px 0;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+    
+    #ruku .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 900px;
+    }
+    
+    #ruku .data-table th, .data-table td {
+      padding: 8px 10px;
+      text-align: center;
+      border-bottom: 1px solid #e0e0e0;
+      max-width: 150px;
+      font-size: 14px;
+    }
+    
+    #ruku .data-table th {
+      background-color: #f5f7fa;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    
+    #ruku .data-table tr:hover {
+      background-color: #f9f9f9;
+    }
+    
+    #ruku .filter-container {
+      background-color: #f9f9f9;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    
+    #ruku .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+    
+    #ruku .filter-item {
+      flex: 1;
+      min-width: 150px;
+    }
+    
+    #ruku .filter-item label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+      font-size: 14px;
+    }
+    
+    #ruku .filter-item select, 
+    #ruku .filter-item input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    #ruku .filter-item textarea {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit; /* 继承字体，避免默认等宽字体 */
+    }
+    
+    /* 聚焦状态样式 */
+    #ruku .filter-item textarea:focus {
+      outline: none;
+      border-color: #4CAF50;
+      box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    }
+    #ruku .multiselect {
+      width: 100%;
+      position: relative;
+    }
+    
+    #ruku .selectBox {
+      position: relative;
+    }
+    
+    #ruku .selectBox select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 12px;
+      cursor: pointer;
+    }
+    
+    #ruku .selectBox select:focus {
+      outline: none;
+      border-color: #4CAF50;
+      box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    }
+    
+    #ruku .overSelect {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+    }
+    
+    #ruku #checkboxes {
+      display: none;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      padding: 5px;
+      background: white;
+      position: absolute;
+      z-index: 10;
+      width: 100%;
+      max-height: 200px;
+      overflow-y: auto;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transition: all 0.2s ease;
+    }
+    
+    #ruku #checkboxes label {
+      display: flex;
+      align-items: center;
+      padding: 8px 10px;
+      cursor: pointer;
+      margin: 0;
+      border-radius: 3px;
+      transition: background-color 0.2s ease;
+    }
+    
+    #ruku #checkboxes label:hover {
+      background-color: #f0f0f0;
+    }
+    
+    #ruku #checkboxes input[type="checkbox"] {
+      margin-right: 8px;
+      width: 16px;
+      height: 16px;
+    }
+    
+    #ruku #checkboxes label.checked {
+      background-color: #e8f5e9;
+    }
+    
+    #ruku .filter-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    
+    #ruku .filter-btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    #ruku .filter-btn.search {
+      background-color: #4CAF50;
+      color: white;
+    }
+    
+    #ruku .filter-btn.search:hover {
+      background-color: #45a049;
+    }
+    
+    #ruku .filter-btn.reset {
+      background-color: #f1f1f1;
+      color: #333;
+    }
+    
+    #ruku .filter-btn.reset:hover {
+      background-color: #e5e5e5;
+    }
+    
+    #ruku .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 20px 0;
+      gap: 10px;
+    }
+    
+    #ruku .pagination button {
+      padding: 6px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: white;
+      cursor: pointer;
+      white-space: nowrap;
+      font-size: 14px;
+    }
+    
+    #ruku .pagination button.active {
+      background-color: #4CAF50;
+      color: white;
+      border-color: #4CAF50;
+    }
+    
+    #ruku .pagination button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    #ruku .pagination-info {
+      text-align: center;
+      margin-bottom: 10px;
+      color: #666;
+      font-size: 14px;
+    }
+    
+    #ruku .data-table td {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    #ruku * {
+      font-family: "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    }
+    
+    #ruku .export-btn {
+      padding: 6px 12px;
+      background-color: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-left: 10px;
+      font-size: 14px;
+    }
+    
+    #ruku .export-btn:hover {
+      background-color: #0b7dda;
+    }
+    
+    #ruku .export-loading {
+      display: none;
+      margin-left: 10px;
+      color: #2196F3;
+      font-size: 14px;
+    }
+    
+    #ruku .selected-status {
+      display: inline-block;
+      background-color: #4CAF50;
+      color: white;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-right: 4px;
+      margin-bottom: 4px;
+      font-size: 12px;
+    }
+    
+    #ruku .selected-status .remove-status {
+      margin-left: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    
+    #ruku .time-filter-group {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    
+    #ruku .time-filter-group .filter-item {
+      min-width: 130px;
+    }
+    
+    #ruku .logs-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+    }
+    
+    #ruku .logs-modal-content {
+      background: white;
+      margin: 5% auto;
+      padding: 20px;
+      width: 80%;
+      max-width: 1200px;
+      max-height: 85vh;
+      border-radius: 8px;
+      position: relative;
+      overflow-y: auto;
+    }
+    
+    #ruku .logs-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    
+    #ruku .logs-table th, .logs-table td {
+      padding: 10px;
+      border-bottom: 1px solid #e0e0e0;
+      text-align: left;
+    }
+    
+    #ruku .logs-table th {
+      background-color: #f5f7fa;
+      font-weight: 600;
+    }
+    
+    /* 操作列样式优化 - 修复编辑按钮显示问题 */
+    .action-cell {
+      width: 60px;
+      position: relative;
+      z-index: 2; /* 确保操作列在提示框之下但能正常交互 */
+    }
+    
+    /* 编辑按钮样式 - 确保图标正确显示 */
+    .edit-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #4CAF50;
+      transition: color 0.2s, transform 0.2s;
+      padding: 4px;
+      font-size: 16px; /* 确保图标大小合适 */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .edit-btn:hover {
+      color: #3d8b40;
+      transform: scale(1.1); /* 悬停时轻微放大 */
+    }
+    
+    /* 确保Font Awesome图标正确显示的后备样式 */
+    .fa-pencil:before {
+      content: "\f040" !important;
+      font-family: "FontAwesome" !important;
+    }
+          /* 水印样式 - 确保覆盖整个页面 */
+      .watermark-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;  /* 视窗宽度 */
+        height: 100vh; /* 视窗高度 */
+        pointer-events: none; /* 不影响交互 */
+        z-index: 999; /* 确保在内容上方但不遮挡UI元素 */
+        overflow: hidden;
+        opacity: 0.04; /* 更淡的透明度，不影响内容阅读 */
+        background-repeat: repeat; /* 重复平铺 */
+      }
+      .watermark-text {
+        position: absolute;
+        font-size: 28px; /* 稍大的字体 */
+        font-weight: 600;
+        color: #000000;
+        transform: rotate(-45deg);
+        white-space: nowrap; /* 防止文本换行 */
+        user-select: none; /* 禁止选择 */
+        display: block;
+      }
+  </style>
+</head>
+
+<body class="font-inter bg-neutral-100 text-neutral-600 min-h-screen flex flex-col">
+  <div id="app" class="flex flex-col h-screen overflow-hidden">
+    <!-- 顶部导航栏 -->
+    <div class="watermark-container" id="watermarkContainer"></div>
+    <header class="bg-white border-b border-neutral-200 shadow-sm z-10">
+  <div class="w-full px-4"> <!-- 移除container mx-auto限制，使用全宽 -->
+    <div class="flex items-center justify-between h-16 max-w-full"> <!-- 允许最大宽度为全屏 -->
+      <!-- 左侧Logo和标题 - 强制居左 -->
+      <div class="flex items-center space-x-2">
+        <!-- 汉堡菜单按钮 - 放在Logo左侧，确保Logo始终在更左侧 -->
+        <button id="menuToggle" class="md:hidden text-neutral-600 hover:text-primary mr-2">
+          <i class="fa fa-bars text-xl"></i>
+        </button>
+        <div class="text-primary text-2xl">
+          <i class="fa fa-truck"></i>
+        </div>
+        <h1 class="text-xl font-bold text-neutral-600 whitespace-nowrap">管理系统</h1>
+      </div>
+      
+      <!-- 右侧用户区域 - 强制居右（新增下拉菜单） -->
+      <div class="flex items-center space-x-6 ml-auto"> <!-- ml-auto确保推到最右侧 -->
+        <!-- 通知图标 -->
+        <div class="relative cursor-pointer hover:text-primary transition-colors">
+          <i class="fa fa-bell-o text-lg"></i>
+          <span class="absolute -top-1 -right-1 bg-danger text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">3</span>
+        </div>
+        <!-- 用户信息及下拉菜单 -->
+        <div class="relative" id="userContainer">
+          <div class="flex items-center space-x-3 cursor-pointer group" id="userMenu">
+            <img src="/img/1.png" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm">
+            <span class="font-medium hidden md:inline-block" id="usernameDisplay">加载中...</span>
+            <i class="fa fa-angle-down text-neutral-400 group-hover:text-primary transition-colors"></i>
+          </div>
+          
+          <!-- 用户下拉菜单 -->
+          <div class="user-dropdown" id="userDropdown">
+            <div class="py-2">
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-user-o mr-2 text-neutral-400"></i>个人中心
+              </a>
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog mr-2 text-neutral-400"></i>系统设置
+              </a>
+              <div class="border-t border-neutral-100 my-1"></div>
+              <button id="logoutBtn" class="w-full text-left px-4 py-2 text-sm text-danger hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-out mr-2"></i>退出登录
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+
+    
+    <!-- 主内容区 -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- 侧边导航 -->
+      <aside class="w-64 bg-white border-r border-neutral-200 flex-shrink-0 hidden md:block transition-all duration-300" id="sidebar">
+        <nav class="py-4 h-full flex flex-col">
+          <div class="px-4 mb-4">
+            <div class="relative">
+              <input type="text" placeholder="搜索功能..." class="w-full py-2 px-3 pl-10 rounded-lg bg-neutral-100 border border-transparent focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm">
+              <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400"></i>
+            </div>
+          </div>
+          
+          <ul class="flex-1 overflow-y-auto py-2">
+            <li class="mb-1">
+              <a href="https://wdbso.vip/dashboard.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-dashboard w-5 text-center mr-3"></i>
+                <span>数据仪表盘</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khwuliu.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-history w-5 text-center mr-3"></i>
+                <span>客户物流详情</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="khruku.html" class="nav-link flex items-center px-4 py-3 text-primary bg-primary/5 border-r-4 border-primary font-medium">
+                <i class="fa fa-sign-in w-5 text-center mr-3"></i>
+                <span>入库管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/errorOrders.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-exclamation-circle w-5 text-center mr-3"></i>
+                <span>异常订单管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khyue.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-money w-5 text-center mr-3"></i>
+                <span>客户余额</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/wuliu.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>物流查询</span>
+              </a>
+            </li>
+            <!-- SKU排行榜导航项 -->
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khsku.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>SKU排行榜</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/everyday.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-calendar-check-o w-5 text-center mr-3"></i>
+                <span>每日看板</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/jianhuo.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-clock-o w-5 text-center mr-3"></i>
+                <span>拣货时效管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="kh/settings.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog w-5 text-center mr-3"></i>
+                <span>系统设置</span>
+              </a>
+            </li>
+          </ul>
+          
+          <!-- 底部帮助区域 -->
+          <div class="p-4 border-t border-neutral-200">
+            <div class="bg-primary/5 rounded-lg p-3">
+              <h4 class="font-medium text-primary text-sm mb-2">需要帮助？</h4>
+              <p class="text-neutral-500 text-xs mb-3">查看帮助文档或联系技术支持</p>
+              <a href="#" class="text-xs text-primary hover:underline">
+                <i class="fa fa-question-circle mr-1"></i> 帮助中心
+              </a>
+            </div>
+          </div>
+        </nav>
+      </aside>
+      
+      <!-- 入库管理模块内容 -->
+      <main class="flex-1 overflow-y-auto p-4 md:p-6">
+        <!-- 页面标题和操作区 -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+          <div>
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-600">入库管理</h2>
+            <p class="text-neutral-400 mt-1">管理所有入库单信息、状态追踪与异常处理</p>
+          </div>
+        </div>
+        
+        <!-- 入库管理功能区 -->
+        <section id="ruku">
+          <div class="filter-container card-shadow">
+              <div class="filter-row">
+                  <div class="filter-item">
+                      <label>仓库</label>
+                      <select id="filter仓库" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                          <option value="">全部</option>
+                          <!-- 选项会通过JavaScript动态填充 -->
+                      </select>
+                  </div>
+                  <div class="filter-item">
+                      <label>客户</label>
+                      <select id="filter客户" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                          <option value="">全部</option>
+                          <!-- 选项会通过JavaScript动态填充 -->
+                      </select>
+                  </div>
+                  <div class="filter-item">
+                      <label>所属客服</label>
+                      <select id="filter所属客服" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                          <option value="">全部</option>
+                          <!-- 选项会通过JavaScript动态填充 -->
+                      </select>
+                  </div>
+                  <div class="filter-item">
+                      <label>当前状态</label>
+                      <div class="multiselect">
+                          <div class="selectBox" onclick="toggleCheckboxes()">
+                              <select class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                                  <option>全部</option>
+                              </select>
+                              <div class="overSelect"></div>
+                          </div>
+                          <div id="checkboxes">
+                              <label for="allStatus">
+                                  <input type="checkbox" id="allStatus" onclick="toggleAllStatuses(this)" />全选
+                              </label>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+              <div class="filter-row">
+                  <div class="filter-item">
+                      <label>是否异常</label>
+                      <select id="filter是否异常" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                          <option value="">全部</option>
+                          <option value="1">是</option>
+                          <option value="0">否</option>
+                      </select>
+                  </div>
+                  <div class="filter-item">
+                      <label>是否有客服备注</label>
+                      <select id="filter是否有客服备注" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                          <option value="">全部</option>
+                          <option value="1">是</option>
+                          <option value="0">否</option>
+                      </select>
+                  </div>
+                  <div class="filter-item">
+                      <label>是否有后端备注</label>
+                      <select id="filter是否有后端备注" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                          <option value="">全部</option>
+                          <option value="1">是</option>
+                          <option value="0">否</option>
+                      </select>
+                  </div>
+              </div>
+              <div class="filter-row">
+                  <div class="filter-item">
+                      <label>时间筛选</label>
+                      <div class="time-filter-group">
+                          <select id="timeFilterType" class="filter-item border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                              <option value="createDate">创建日期</option>
+                              <option value="expectedArrival">预计到仓时间</option>
+                              <option value="actualArrival">实际到仓时间</option>
+                              <option value="shelvingTime">上架时间</option>
+                          </select>
+                          <!-- 使用Element Plus的日期范围选择器替换原来的两个日期选择器 -->
+                          <div class="relative filter-item" style="min-width: 300px;">
+                            <el-date-picker
+                              id="dateRangePicker"
+                              v-model="dateRange"
+                              type="daterange"
+                              range-separator="至"
+                              start-placeholder="开始日期"
+                              end-placeholder="结束日期"
+                              :picker-options="pickerOptions"  
+                              class="w-full"
+                            ></el-date-picker>
+                        </div>
+                      </div>
+                  </div>
+              </div>
+              <div class="filter-row">
+                  <div class="filter-item">
+                  <label>入库单号搜索</label>
+                  <textarea 
+                    id="search入库单号" 
+                    placeholder="输入入库单号搜索，多个单号可用换行、空格或逗号分隔" 
+                    class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all min-h-[80px] resize-y"
+                  ></textarea>
+                </div>
+                  <div class="filter-item">
+                      <label>跟踪单号搜索</label>
+                      <input type="text" id="search跟踪单号" placeholder="输入跟踪单号搜索" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                  </div>
+                  <!-- 新增：参考单号搜索框 -->
+                  <div class="filter-item">
+                      <label>参考单号搜索</label>
+                      <textarea 
+                        id="search参考单号" 
+                        placeholder="输入参考单号搜索，多个单号可用换行、空格或逗号分隔" 
+                        class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all min-h-[80px] resize-y"
+                      ></textarea>
+                  </div>
+              </div>
+              <div class="filter-actions">
+                  <button class="filter-btn reset hover-lift" id="resetFilters">重置</button>
+                  <button class="filter-btn search hover-lift" id="applyFilters">搜索</button>
+                  <button class="export-btn hover-lift" id="exportExcel">导出Excel</button>
+                  <span class="export-loading" id="exportLoading">正在导出...</span>
+              </div>
+          </div>
+
+          <div class="loading" style="display: none; text-align: center; padding: 20px;">加载中...</div>
+          <div class="error-message" style="display: none; color: red; text-align: center; padding: 20px;"></div>
+          
+          <!-- 表格容器 -->
+          <div class="table-container bg-white rounded-xl">
+              <table id="rukuTable" class="data-table">
+                  <thead>
+                      <tr>
+                          <th>仓库</th>
+                          <th>入库单号</th>
+                          <th>客户</th>
+                          <th>所属客服</th>
+                          <th>预报箱数/托盘数</th>
+                          <th>当前状态</th>
+                          <th>创建日期</th>
+                          <th>上架时间</th>
+                          <th>派送方式</th>
+                          <th>跟踪单号</th>
+                          <th>是否已提供POD</th>
+                          <th>预计到仓时间</th>
+                          <th>实际到仓时间</th>
+                          <th>上架箱数</th>
+                          <th>客服备注</th>
+                          <th>后端备注</th>
+                          <th>是否异常</th>
+                          <th class="action-cell">操作</th>
+                      </tr>
+                  </thead>
+                  <tbody id="rukuTableBody">
+                  </tbody>
+              </table>
+          </div>
+          
+          <div class="pagination-info" id="paginationInfo">
+              共 <span id="totalRecords">0</span> 条记录，当前第 <span id="currentPage">1</span> 页，每页 <span id="pageSize">200</span> 条
+          </div>
+          <div class="pagination" id="paginationControls">
+              <button id="firstPage" disabled class="hover-lift" style="color: #666">首页</button>
+              <button id="rkPrevPage" disabled class="hover-lift" style="color: #666">上一页</button>
+              <div id="pageNumbers"></div>
+              <button id="rkNextPage" class="hover-lift" style="color: #666">下一页</button>
+              <button id="lastPage" class="hover-lift" style="color: #666">末页</button>
+          </div>
+
+          <div class="edit-modal">
+              <div class="modal-content card-shadow">
+                  <span class="close-btn">&times;</span>
+                  <h3>编辑入库单信息 <span id="currentRukuNoDisplay" style="color: #666; font-size: 0.8em;"></span></h3>
+                  <form id="editForm">
+                      <input type="hidden" id="currentRukuNo">
+                      <input type="hidden" id="currentStatus">
+                      
+                      <div class="kf-fields" style="display: none;">
+                          <div class="form-group">
+                              <label>派送方式:</label>
+                              <select id="edit派送方式" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                                  <option value="">请选择</option>
+                                  <option value="卡派">卡派</option>
+                                  <option value="整柜">整柜</option>
+                                  <option value="快递">快递</option>
+                              </select>
+                          </div>
+                          <div class="form-group">
+                              <label>跟踪单号:</label>
+                              <input type="text" id="edit跟踪单号" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                          </div>
+                          <div class="form-group">
+                              <label>是否已提供POD:</label>
+                              <select id="edit是否已提供POD" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                                  <option value="0">否</option>
+                                  <option value="1">是</option>
+                              </select>
+                          </div>
+                          <div class="form-group">
+                              <label>预计到仓时间:</label>
+                              <input type="datetime-local" id="edit预计到仓时间" disabled class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                              <span id="status-info" style="color: red; font-size: 0.9em;"></span>
+                          </div>
+                          <div class="form-group">
+                              <label>客服备注:</label>
+                              <textarea id="edit客服备注" style="width: 100%; height: 80px;" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all"></textarea>
+                          </div>
+                      </div>
+
+                      <div class="hd-fields" style="display: none;">
+                          <div class="form-group">
+                              <label>实际到仓时间:</label>
+                              <input type="datetime-local" id="edit实际到仓时间" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+                          </div>
+                          <div class="form-group">
+                              <label>后端备注:</label>
+                              <textarea id="edit后端备注" style="width: 100%; height: 80px;" class="border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all"></textarea>
+                          </div>
+                      </div>
+
+                      <button type="submit" class="save-btn hover-lift">保存</button>
+                  </form>
+              </div>
+          </div>
+
+          <div class="logs-modal" id="logsModal">
+              <div class="logs-modal-content card-shadow">
+                  <span class="close-btn" id="closeLogsModal">&times;</span>
+                  <h3 id="logsTitle">入库单日志 <span id="currentRukuNoForLogs" style="color: #666; font-size: 0.8em;"></span></h3>
+                  <div class="loading" id="logsLoading" style="text-align: center; padding: 20px;">加载中...</div>
+                  <div class="error-message" id="logsError" style="display: none; color: red; text-align: center; padding: 20px;"></div>
+                  <table class="logs-table">
+                      <thead>
+                          <tr>
+                              <th>操作时间</th>
+                              <th>操作人</th>
+                              <th>操作类型</th>
+                              <th>操作内容</th>
+                              <th>操作结果</th>
+                          </tr>
+                      </thead>
+                      <tbody id="logsTableBody">
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- 入库管理功能脚本 -->
+  <script>
+  // 初始化Vue实例，将其赋值给全局变量以便访问
+  window.app = Vue.createApp({
+      data() {
+    return {
+      dateRange: null,
+      // 日期选择器中文配置
+      pickerOptions: {
+        // 星期显示中文
+        firstDayOfWeek: 1,
+        // 月份和星期的中文显示配置
+        shortcuts: [
+          {
+            text: '今天',
+            onClick(picker) {
+              const end = new Date();
+              const start = new Date();
+              picker.$emit('pick', [start, end]);
+            }
+          },
+          {
+            text: '昨天',
+            onClick(picker) {
+              const end = new Date();
+              const start = new Date();
+              start.setTime(start.getTime() - 3600 * 1000 * 24);
+              end.setTime(end.getTime() - 3600 * 1000 * 24);
+              picker.$emit('pick', [start, end]);
+            }
+          },
+          {
+            text: '近7天',
+            onClick(picker) {
+              const end = new Date();
+              const start = new Date();
+              start.setTime(start.getTime() - 3600 * 1000 * 24 * 7);
+              picker.$emit('pick', [start, end]);
+            }
+          },
+          {
+            text: '近30天',
+            onClick(picker) {
+              const end = new Date();
+              const start = new Date();
+              start.setTime(start.getTime() - 3600 * 1000 * 24 * 30);
+              picker.$emit('pick', [start, end]);
+            }
+          }
+        ],
+        // 月份面板中文配置
+        monthBeforeYear: true,
+        format: 'yyyy年MM月dd日'
+      }
+    }
+  },
+  watch: {
+    dateRange(newVal) {
+      console.log('日期范围变化:', newVal);
+    }
+  }
+}).use(ElementPlus, { locale: ElementPlusLocaleZhCn }).mount('#app');
+
+  // 初始化水印（确保覆盖整个页面）
+    function initWatermark(username) {
+      const container = document.getElementById('watermarkContainer');
+      if (!container || !username) return;
+      
+      // 清空现有水印
+      container.innerHTML = '';
+      
+      // 获取视窗尺寸，确保水印覆盖整个可见区域
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // 计算水印数量和间距（增加密度确保完全覆盖）
+      const step = 200; // 水印间距（像素）- 更小的间距意味着更密集的水印
+      const horizontalCount = Math.ceil(windowWidth / step) + 1; // 水平方向水印数量
+      const verticalCount = Math.ceil(windowHeight / step) + 1;   // 垂直方向水印数量
+      
+      // 创建水印网格
+      for (let i = 0; i < verticalCount; i++) {
+        for (let j = 0; j < horizontalCount; j++) {
+          const watermark = document.createElement('div');
+          watermark.className = 'watermark-text';
+          watermark.textContent = username;
+          
+          // 计算位置（覆盖整个视窗）
+          const left = j * step - step/2; // 向左偏移一半间距，确保边缘也有覆盖
+          const top = i * step - step/2;  // 向上偏移一半间距
+          
+          // 设置位置和样式
+          watermark.style.left = `${left}px`;
+          watermark.style.top = `${top}px`;
+          
+          container.appendChild(watermark);
+        }
+      }
+    }
+    // 显示物流跟踪信息
+    function showTrackingInfo(trackingNumber) {
+        const trackingModal = document.createElement('div');
+        trackingModal.className = 'tracking-modal';
+        trackingModal.style.cssText = `
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1001;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.3s ease;
+        `;
+        
+        trackingModal.innerHTML = `
+            <div style="background: white; width: 90%; max-width: 1000px; height: 80%; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
+                <div style="padding: 15px; background: #f5f5f5; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; height: 60px;">
+                    <h3 style="margin: 0; font-size: 18px; color: #333;">物流跟踪信息 - ${trackingNumber}</h3>
+                    <button id="closeTrackingModal" style="
+                        background: #e74c3c;
+                        color: white;
+                        border: none;
+                        border-radius: 50%;
+                        width: 30px;
+                        height: 30px;
+                        font-size: 16px;
+                        cursor: pointer;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        transition: background 0.2s ease;
+                        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                    ">×</button>
+                </div>
+                <div style="flex: 1; overflow: hidden; position: relative;">
+                    <iframe 
+                        src="https://www.track123.com/cn/track?code=&trackNos=${trackingNumber}" 
+                        style="width: 100%; height: 100%; border: none;"
+                        sandbox="allow-same-origin allow-scripts allow-popups"
+                    ></iframe>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(trackingModal);
+        
+        const closeBtn = trackingModal.querySelector('#closeTrackingModal');
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.background = '#c0392b';
+            closeBtn.style.transform = 'scale(1.05)';
+        });
+        
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.background = '#e74c3c';
+            closeBtn.style.transform = 'scale(1)';
+        });
+        
+        closeBtn.addEventListener('click', () => {
+            trackingModal.style.opacity = '0';
+            setTimeout(() => {
+                document.body.removeChild(trackingModal);
+            }, 300);
+        });
+        
+        trackingModal.addEventListener('click', (e) => {
+            if (e.target === trackingModal) {
+                trackingModal.style.opacity = '0';
+                setTimeout(() => {
+                    document.body.removeChild(trackingModal);
+                }, 300);
+            }
+        });
+    }
+
+    // 时间格式化函数
+    function formatDateTime(timeStr) {
+        if (!timeStr) return '';
+        const date = new Date(timeStr);
+        if (isNaN(date.getTime())) return '无效时间';
+        
+        const pad = (n) => n.toString().padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    }
+
+    // 状态管理
+    let currentPage = 1;
+    const pageSize = 200;
+    let totalRecords = 0;
+    let totalPages = 0;
+    let statusCheckboxes = {};
+    let allStatusOptions = [];
+
+    // 切换多选下拉框显示/隐藏
+    function toggleCheckboxes() {
+        const checkboxes = document.getElementById("checkboxes");
+        checkboxes.style.display = checkboxes.style.display === "none" ? "block" : "none";
+    }
+
+    // 全选/取消全选状态
+    function toggleAllStatuses(checkbox) {
+        const isChecked = checkbox.checked;
+        
+        Object.keys(statusCheckboxes).forEach(status => {
+            if (status !== 'allStatus') {
+                statusCheckboxes[status].checked = isChecked;
+                const label = document.querySelector(`#checkboxes label[for="status_${status.replace(/\s+/g, '_')}"]`);
+                if (label) {
+                    label.className = isChecked ? 'checked' : '';
+                }
+            }
+        });
+        
+        updateSelectedStatuses();
+    }
+
+    // 更新选中状态的显示
+    function updateSelectedStatuses() {
+        const selectedStatuses = [];
+        let hasSelection = false;
+        
+        Object.keys(statusCheckboxes).forEach(status => {
+            if (status !== 'allStatus' && statusCheckboxes[status].checked) {
+                selectedStatuses.push(status);
+                hasSelection = true;
+                const label = document.querySelector(`#checkboxes label[for="status_${status.replace(/\s+/g, '_')}"]`);
+                if (label) label.className = 'checked';
+            } else {
+                const label = document.querySelector(`#checkboxes label[for="status_${status.replace(/\s+/g, '_')}"]`);
+                if (label) label.className = '';
+            }
+        });
+        
+        const allStatusCheckbox = document.getElementById('allStatus');
+        allStatusCheckbox.checked = !hasSelection ? false : Object.keys(statusCheckboxes).length - 1 === selectedStatuses.length;
+        
+        const selectBox = document.querySelector('.selectBox select');
+        if (!hasSelection) {
+            selectBox.innerHTML = '<option>全部</option>';
+        } else {
+            const selectedText = selectedStatuses.length > 3 
+                ? `${selectedStatuses.slice(0, 3).join(', ')}...` 
+                : selectedStatuses.join(', ');
+            selectBox.innerHTML = `<option>${selectedText}</option>`;
+        }
+    }
+
+    // 获取选中的状态（返回逗号分隔字符串）
+    function getSelectedStatuses() {
+        const selected = [];
+        Object.keys(statusCheckboxes).forEach(status => {
+            if (status !== 'allStatus' && statusCheckboxes[status].checked) {
+                selected.push(status);
+            }
+        });
+        return selected.join(',');
+    }
+
+    // 加载入库单数据
+    async function loadRukuData() {
+        const loading = document.querySelector('#ruku .loading');
+        const errorMessage = document.querySelector('#ruku .error-message');
+        const tableBody = document.getElementById('rukuTableBody');
+
+        try {
+            loading.style.display = 'block';
+            errorMessage.style.display = 'none';
+            tableBody.innerHTML = '';
+
+            // 构建查询参数
+            const params = new URLSearchParams();
+            params.append('warehouse', document.getElementById('filter仓库').value || '');
+            params.append('customer', document.getElementById('filter客户').value || '');
+            params.append('kefu', document.getElementById('filter所属客服').value || '');
+            const status = getSelectedStatuses();
+            if (status) params.append('status', status);
+            params.append('isAbnormal', document.getElementById('filter是否异常').value || '');
+            params.append('hasKefuRemark', document.getElementById('filter是否有客服备注').value || '');
+            params.append('hasHdRemark', document.getElementById('filter是否有后端备注').value || '');
+            params.append('rukuNo', document.getElementById('search入库单号').value || '');
+            params.append('trackingNo', document.getElementById('search跟踪单号').value || '');
+            // 新增：添加参考单号参数
+            params.append('referenceNo', document.getElementById('search参考单号').value || '');
+            params.append('timeFilterType', document.getElementById('timeFilterType').value || 'createDate');
+            
+            // 获取日期范围选择器的值 - 使用全局window.app访问Vue实例
+            if (window.app && window.app.dateRange && window.app.dateRange.length === 2) {
+                // 格式化日期为YYYY-MM-DD
+                const startDate = formatDateForApi(window.app.dateRange[0]);
+                const endDate = formatDateForApi(window.app.dateRange[1]);
+                params.append('startDate', startDate);
+                params.append('endDate', endDate);
+            } else {
+                params.append('startDate', '');
+                params.append('endDate', '');
+            }
+            
+            // 调用后端接口获取真实数据
+            const response = await fetch(`/select_ruku_data?${params.toString()}`);
+            if (!response.ok) throw new Error(`接口请求失败: ${response.status} ${response.statusText}`);
+            const result = await response.json();
+
+            if (!result.success) throw new Error(result.details || '数据获取失败');
+            const allFilteredData = result.data || []; 
+            
+            // 前端排序（按创建日期升序）
+            allFilteredData.sort((a, b) => {
+                const dateA = new Date(a.创建日期);
+                const dateB = new Date(b.创建日期);
+                return dateA - dateB;
+            });
+            
+            totalRecords = allFilteredData.length;
+            totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+
+            // 确保当前页不超过总页数
+            if (currentPage > totalPages) {
+                currentPage = totalPages;
+            }
+
+            // 前端分页
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, allFilteredData.length);
+            const currentPageData = allFilteredData.slice(startIndex, endIndex);
+
+            // 首次加载时初始化筛选选项
+            if (Object.keys(statusCheckboxes).length === 0) {
+                await initFilterOptions();
+            }
+
+            // 渲染表格和分页
+            renderTable(currentPageData);
+            updatePaginationInfo();
+
+        } catch (error) {
+            console.error('[loadRukuData] 错误:', error);
+            errorMessage.textContent = `加载失败：${error.message}`;
+            errorMessage.style.display = 'block';
+        } finally {
+            loading.style.display = 'none';
+        }
+    }
+
+    // 格式化日期为API所需格式
+    function formatDateForApi(date) {
+        if (!date) return '';
+        // 如果是Date对象直接处理，否则尝试转换
+        const targetDate = date instanceof Date ? date : new Date(date);
+        if (isNaN(targetDate.getTime())) return '';
+        
+        const pad = (n) => n.toString().padStart(2, '0');
+        return `${targetDate.getFullYear()}-${pad(targetDate.getMonth() + 1)}-${pad(targetDate.getDate())}`;
+    }
+
+    // 初始化筛选选项
+    async function initFilterOptions() {
+        try {
+            // 请求全量数据用于获取筛选选项（仅首次加载时执行）
+            const response = await fetch('/select_ruku_data');
+            if (!response.ok) throw new Error('筛选选项加载失败');
+            
+            const result = await response.json();
+            if (!result.success) throw new Error(result.details || '筛选选项获取失败');
+            
+            const allData = result.data || [];
+            
+            // 提取唯一值
+            const warehouses = [...new Set(allData.map(item => item.仓库).filter(Boolean))];
+            const customers = [...new Set(allData.map(item => item.客户).filter(Boolean))];
+            const kefus = [...new Set(allData.map(item => item.所属客服).filter(Boolean))];
+            allStatusOptions = [...new Set(allData.map(item => item.当前状态).filter(Boolean))];
+
+            // 填充仓库选项
+            const warehouseSelect = document.getElementById('filter仓库');
+            warehouses.forEach(warehouse => {
+                const option = document.createElement('option');
+                option.value = warehouse;
+                option.textContent = warehouse;
+                warehouseSelect.appendChild(option);
+            });
+
+            // 填充客户选项
+            const customerSelect = document.getElementById('filter客户');
+            customers.forEach(customer => {
+                const option = document.createElement('option');
+                option.value = customer;
+                option.textContent = customer;
+                customerSelect.appendChild(option);
+            });
+
+            // 填充所属客服选项
+            const kefuSelect = document.getElementById('filter所属客服');
+            kefus.forEach(kefu => {
+                const option = document.createElement('option');
+                option.value = kefu;
+                option.textContent = kefu;
+                kefuSelect.appendChild(option);
+            });
+
+            // 填充状态多选框
+            const checkboxesContainer = document.getElementById('checkboxes');
+            allStatusOptions.forEach(status => {
+                const checkboxId = `status_${status.replace(/\s+/g, '_')}`;
+                const label = document.createElement('label');
+                label.htmlFor = checkboxId;
+                label.innerHTML = `<input type="checkbox" id="${checkboxId}" onclick="updateSelectedStatuses()" />${status}`;
+                checkboxesContainer.appendChild(label);
+                statusCheckboxes[status] = document.getElementById(checkboxId);
+            });
+
+            // 点击其他区域关闭多选框
+            document.addEventListener('click', (e) => {
+                const multiselect = document.querySelector('.multiselect');
+                if (!multiselect?.contains(e.target)) {
+                    document.getElementById('checkboxes').style.display = 'none';
+                }
+            });
+
+        } catch (error) {
+            console.error('[initFilterOptions] 错误:', error);
+            alert(`筛选选项初始化失败：${error.message}`);
+        }
+    }
+
+    // 渲染表格数据
+    function renderTable(data) {
+        const tableBody = document.getElementById('rukuTableBody');
+        tableBody.innerHTML = '';
+        
+        if (data.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td colspan="18" style="text-align: center; color: #666;">没有找到符合条件的记录</td>`;
+            tableBody.appendChild(row);
+            return;
+        }
+        
+        // 获取当前用户权限
+        const currentUser = localStorage.getItem('username') || '';
+        const isAdminUser = ['admin', 'Link', 'ZHANGGUIDE'].includes(currentUser);
+        
+        // 渲染数据行
+        data.forEach(item => {
+            // 状态样式映射
+            const statusStyles = {
+                '待入库': 'bg-warning/10 text-warning',
+                '已入库': 'bg-neutral-200 text-neutral-500',
+                '已上架': 'bg-success/10 text-success',
+                '异常': 'bg-danger/10 text-danger',
+                '已取消': 'bg-neutral-300 text-neutral-600'
+            };
+            
+            const statusClass = statusStyles[item.当前状态] || 'bg-primary/10 text-primary';
+            
+            // 处理备注内容，替换换行符以便在提示框中正确显示
+            const kefuRemark = (item.客服备注 || '').replace(/\n/g, '\\n');
+            const hdRemark = (item.后端备注 || '').replace(/\n/g, '\\n');
+            
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-neutral-50 transition-colors';
+            row.innerHTML = `
+                <td>${item.仓库}</td>
+                <td><a href="javascript:void(0)" class="ruku-no-link text-primary hover:underline" data-rukuid="${item.入库单号}">${item.入库单号}</a></td>
+                <td>${item.客户}</td>
+                <td>${item.所属客服}</td>
+                <td>${item.预报箱数或托盘数}</td>
+                <td>
+                    <span class="px-2 py-1 text-xs rounded-full ${statusClass}">${item.当前状态}</span>
+                </td>
+                <td>${formatDateTime(item.创建日期)}</td>
+                <td>${formatDateTime(item.上架时间)}</td>
+                <td>${item.派送方式}</td>
+                <td>
+                  ${item.跟踪单号 
+                    ? `<a href="javascript:void(0)" onclick="showTrackingInfo('${item.跟踪单号}')" style="color: #0066cc; text-decoration: underline;">${item.跟踪单号}</a>` 
+                    : ''
+                  }
+                </td>
+                <td>${formatBoolean(item.是否已提供POD)}</td>
+                <td>${formatDateTime(item.预计到仓时间)}</td>
+                <td>${formatDateTime(item.实际到仓时间)}</td>
+                <td>${item.上架箱数}</td>
+                <td class="text-ellipsis custom-tooltip" data-tooltip="${kefuRemark}">${item.客服备注}</td>
+                <td class="text-ellipsis custom-tooltip" data-tooltip="${hdRemark}">${item.后端备注}</td>
+                <td>${formatBoolean(item.是否异常)}</td>
+                <td class="action-cell">
+                    <!-- 确保编辑按钮的图标正确显示 -->
+                    <button class="edit-btn hover-lift" data-rukuid="${item.入库单号}" data-status="${item.当前状态}" title="编辑">
+                        <i class="fa fa-pencil" aria-hidden="true"></i>
+                    </button>
+                </td>
+            `;
+            tableBody.appendChild(row);
+        });
+        
+        // 绑定编辑事件
+        bindEditButtonEvents();
+        bindRukuNoLinkEvents();
+    }
+
+    // 布尔值格式化函数
+    function formatBoolean(value) {
+        if (value === 0) return '否';
+        if (value === 1) return '是';
+        return value ?? '未知';
+    }
+
+    // 重置筛选条件
+    function resetFilters() {
+        document.getElementById('filter仓库').value = '';
+        document.getElementById('filter客户').value = '';
+        document.getElementById('filter所属客服').value = '';
+        
+        // 重置状态多选框
+        document.getElementById('allStatus').checked = false;
+        Object.keys(statusCheckboxes).forEach(status => {
+            if (status !== 'allStatus') {
+                statusCheckboxes[status].checked = false;
+                const label = document.querySelector(`#checkboxes label[for="status_${status.replace(/\s+/g, '_')}"]`);
+                if (label) label.className = '';
+            }
+        });
+        updateSelectedStatuses();
+        
+        document.getElementById('filter是否异常').value = '';
+        document.getElementById('filter是否有客服备注').value = '';
+        document.getElementById('filter是否有后端备注').value = '';
+        document.getElementById('timeFilterType').value = 'createDate';
+        
+        // 重置日期范围选择器 - 使用全局window.app访问Vue实例
+        if (window.app) {
+            window.app.dateRange = null;
+        }
+        
+        document.getElementById('search入库单号').value = '';
+        document.getElementById('search跟踪单号').value = '';
+        // 新增：重置参考单号搜索框
+        document.getElementById('search参考单号').value = '';
+        
+        // 重置页码并重新加载
+        currentPage = 1;
+        loadRukuData();
+    }
+
+    // 更新分页信息
+    function updatePaginationInfo() {
+        console.log(`[分页信息] 当前页: ${currentPage}, 总页数: ${totalPages}, 总记录数: ${totalRecords}`);
+        
+        document.getElementById('totalRecords').textContent = totalRecords;
+        document.getElementById('currentPage').textContent = currentPage;
+        document.getElementById('pageSize').textContent = pageSize;
+        
+        // 判断是否为首页和末页
+        const isFirstPage = currentPage === 1;
+        const isLastPage = currentPage >= totalPages && (currentPage * pageSize >= totalRecords);
+        
+        // 更新按钮状态
+        document.getElementById('firstPage').disabled = isFirstPage;
+        document.getElementById('rkPrevPage').disabled = isFirstPage;
+        document.getElementById('rkNextPage').disabled = isLastPage;
+        document.getElementById('lastPage').disabled = isLastPage;
+        
+        // 生成分页数字按钮
+        const pageNumbersContainer = document.getElementById('pageNumbers');
+        pageNumbersContainer.innerHTML = '';
+        
+        let startPage = 1;
+        let endPage = totalPages;
+        
+        if (totalPages > 5) {
+            startPage = Math.max(1, currentPage - 2);
+            endPage = Math.min(totalPages, startPage + 4);
+            if (endPage - startPage < 4 && startPage > 1) {
+                startPage = Math.max(1, endPage - 4);
+            }
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+            const button = document.createElement('button');
+            button.textContent = i;
+            button.className = i === currentPage ? 'active hover-lift' : 'hover-lift';
+            button.addEventListener('click', () => {
+                if (i !== currentPage) {
+                    currentPage = i;
+                    loadRukuData();
+                }
+            });
+            pageNumbersContainer.appendChild(button);
+        }
+    }
+
+    // 分页控制事件绑定
+    function bindPaginationEvents() {
+        document.getElementById('firstPage').addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage = 1;
+                loadRukuData();
+            }
+        });
+        
+        document.getElementById('rkPrevPage').addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                loadRukuData();
+            }
+        });
+        
+        document.getElementById('rkNextPage').addEventListener('click', () => {
+            if (currentPage < totalPages) {
+                currentPage++;
+                loadRukuData();
+            }
+        });
+        
+        document.getElementById('lastPage').addEventListener('click', () => {
+            if (currentPage < totalPages) {
+                currentPage = totalPages;
+                loadRukuData();
+            }
+        });
+    }
+
+    // 编辑按钮事件绑定
+    function bindEditButtonEvents() {
+        // 清除现有事件监听并重新绑定
+        document.querySelectorAll('.edit-btn').forEach(btn => {
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+        });
+        
+        document.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                // 阻止事件冒泡，避免影响其他元素
+                e.stopPropagation();
+                
+                const rukuNo = e.target.closest('.edit-btn').dataset.rukuid;
+                const status = e.target.closest('.edit-btn').dataset.status;
+                const modal = document.querySelector('.edit-modal');
+                const kfFields = document.querySelector('.kf-fields');
+                const hdFields = document.querySelector('.hd-fields');
+                const expectedArrivalField = document.getElementById('edit预计到仓时间');
+                const statusInfo = document.getElementById('status-info');
+
+                // 获取当前行数据
+                const currentRow = e.target.closest('tr');
+                const currentData = {
+                    派送方式: currentRow.cells[8].textContent,
+                    跟踪单号: currentRow.cells[9].textContent,
+                    是否已提供POD: currentRow.cells[10].textContent === '是' ? 1 : 0,
+                    预计到仓时间: currentRow.cells[11].textContent,
+                    客服备注: currentRow.cells[14].textContent,
+                    实际到仓时间: currentRow.cells[12].textContent,
+                    后端备注: currentRow.cells[15].textContent
+                };
+
+                // 填充表单
+                document.getElementById('currentRukuNo').value = rukuNo;
+                document.getElementById('currentStatus').value = status;
+                document.getElementById('currentRukuNoDisplay').textContent = `(单号: ${rukuNo})`;
+                document.getElementById('edit派送方式').value = currentData.派送方式;
+                document.getElementById('edit跟踪单号').value = (currentData.跟踪单号 || '').trim();
+                document.getElementById('edit是否已提供POD').value = currentData.是否已提供POD;
+                
+                document.getElementById('edit实际到仓时间').value = currentData.实际到仓时间 
+                    ? formatForDatetimeLocal(currentData.实际到仓时间) 
+                    : formatForDatetimeLocal(new Date().toISOString());
+                
+                document.getElementById('edit预计到仓时间').value = formatForDatetimeLocal(currentData.预计到仓时间);
+                document.getElementById('edit客服备注').value = currentData.客服备注;
+                document.getElementById('edit后端备注').value = currentData.后端备注;
+
+                // 控制预计到仓时间编辑权限
+                if (status === '待入库') {
+                    expectedArrivalField.disabled = false;
+                    statusInfo.textContent = '';
+                } else {
+                    expectedArrivalField.disabled = true;
+                    statusInfo.textContent = `当前状态为"${status}"，不可编辑预计到仓时间`;
+                }
+
+                // 根据权限显示编辑字段
+                const currentUser = localStorage.getItem('username') || '';
+                const isAdminUser = ['admin', 'Link', 'ZHANGGUIDE'].includes(currentUser);
+                kfFields.style.display = isAdminUser ? 'none' : 'block';
+                hdFields.style.display = isAdminUser ? 'block' : 'none';
+                
+                modal.style.display = 'block';
+            });
+        });
+    }
+
+    // 入库单号链接事件绑定（查看日志）
+    function bindRukuNoLinkEvents() {
+        document.querySelectorAll('.ruku-no-link').forEach(link => {
+            const newLink = link.cloneNode(true);
+            link.parentNode.replaceChild(newLink, link);
+        });
+        
+        document.querySelectorAll('.ruku-no-link').forEach(link => {
+            link.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const rukuNo = e.target.dataset.rukuid;
+                const logsModal = document.getElementById('logsModal');
+                const logsTableBody = document.getElementById('logsTableBody');
+                const logsLoading = document.getElementById('logsLoading');
+                const logsError = document.getElementById('logsError');
+                
+                logsModal.style.display = 'block';
+                logsTableBody.innerHTML = '';
+                logsLoading.style.display = 'block';
+                logsError.style.display = 'none';
+                document.getElementById('currentRukuNoForLogs').textContent = `(单号: ${rukuNo})`;
+                
+                try {
+                    // 调用接口获取日志数据
+                    const response = await fetch(`/get_ruku_logs?ruku_id=${rukuNo}`);
+                    if (!response.ok) throw new Error(`日志请求失败: ${response.status}`);
+                    
+                    const data = await response.json();
+                    if (!data.success) throw new Error(data.details || '日志获取失败');
+                    
+                    const logs = data.logs || [];
+                    
+                    if (logs.length === 0) {
+                        logsTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #666;">没有找到该入库单的日志记录</td></tr>`;
+                    } else {
+                        logs.forEach(log => {
+                            const row = document.createElement('tr');
+                            let actionContent = formatLogContent(log);
+                            
+                            row.innerHTML = `
+                                <td>${formatDateTime(log.submitTime)}</td>
+                                <td>${log.username}</td>
+                                <td>${formatActionType(log.action)}</td>
+                                <td>${actionContent}</td>
+                                <td>${log.actionResult || '成功'}</td>
+                            `;
+                            logsTableBody.appendChild(row);
+                        });
+                    }
+                } catch (error) {
+                    console.error('[bindRukuNoLinkEvents] 错误:', error);
+                    logsError.textContent = `加载日志失败：${error.message}`;
+                    logsError.style.display = 'block';
+                } finally {
+                    logsLoading.style.display = 'none';
+                }
+            });
+        });
+    }
+
+    // 格式化日志内容
+    function formatLogContent(log) {
+        if (!log.修改内容) return '无详细修改内容';
+        
+        let content = '';
+        Object.keys(log.修改内容).forEach(key => {
+            if (['用户名', '实际到货箱数'].includes(key)) return;
+            
+            let value = log.修改内容[key];
+            let displayValue = value;
+            
+            if (value === null) {
+                displayValue = '无数据';
+            } else if (value === '') {
+                displayValue = '空值';
+            } else if (key.includes('时间') && value) {
+                displayValue = formatDateTime(value);
+            } else if (key.includes('是否')) {
+            } else if (key.includes('是否')) {
+                displayValue = value === '1' ? '是' : '否';
+            }
+            
+            content += `<div>${key}: ${displayValue}</div>`;
+        });
+        
+        return content;
+    }
+
+    // 格式化操作类型
+    function formatActionType(action) {
+        const actionMap = {
+            'hd_updata': '后端更新',
+            'kf_updata': '客服更新',
+            'create_ruku': '创建入库单',
+            'status_change': '状态变更'
+        };
+        return actionMap[action] || action;
+    }
+
+    // 时间格式化（适配datetime-local输入框）
+    function formatForDatetimeLocal(timeStr) {
+        if (!timeStr || timeStr === '无效时间') return '';
+        
+        try {
+            let date;
+            if (timeStr.includes('-') && timeStr.includes(':')) {
+                const parts = timeStr.split(' ');
+                const dateParts = parts[0].split('-');
+                const timeParts = parts[1].split(':');
+                
+                date = new Date(Date.UTC(
+                    parseInt(dateParts[0]),
+                    parseInt(dateParts[1]) - 1,
+                    parseInt(dateParts[2]),
+                    parseInt(timeParts[0]),
+                    parseInt(timeParts[1]),
+                    parseInt(timeParts[2] || 0)
+                ));
+            } else {
+                date = new Date(timeStr);
+            }
+            
+            if (isNaN(date.getTime())) return '';
+            return date.toISOString().slice(0, 16);
+        } catch (e) {
+            console.error('日期解析失败:', timeStr, e);
+            return '';
+        }
+    }
+
+    // 模态框关闭逻辑
+    document.querySelector('.close-btn').addEventListener('click', () => {
+        document.querySelector('.edit-modal').style.display = 'none';
+    });
+
+    document.getElementById('closeLogsModal').addEventListener('click', () => {
+        document.getElementById('logsModal').style.display = 'none';
+    });
+
+    // 表单提交逻辑
+document.getElementById('editForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const rukuNo = document.getElementById('currentRukuNo').value;
+    const status = document.getElementById('currentStatus').value;
+    
+    const currentUser = localStorage.getItem('username') || '';
+    const isAdminUser = ['admin', 'Link', 'ZHANGGUIDE'].includes(currentUser);
+    
+    try {
+        // 客服提交验证
+        if (!isAdminUser) {
+            const deliveryMethod = document.getElementById('edit派送方式').value;
+            if (!deliveryMethod) {
+                alert('请填写派送方式！');
+                return;
+            }
+        }
+        
+        let url, requestBody;
+        
+        if (isAdminUser) {
+            // 后端用户提交 - 添加用户名字段
+            const expectedArrivalTime = document.getElementById('edit预计到仓时间').value;
+            const isAbnormal = !['待入库', '已取消'].includes(status) && !expectedArrivalTime ? '1' : '0';
+            
+            url = '/hd_updata';
+            requestBody = {
+                入库单号: rukuNo,
+                实际到仓时间: document.getElementById('edit实际到仓时间').value,
+                后端备注: document.getElementById('edit后端备注').value,
+                是否异常: isAbnormal,
+                用户名: currentUser  // 添加当前登录用户名
+            };
+        } else {
+            // 客服用户提交 - 添加用户名字段
+            url = '/kf_updata';
+            requestBody = {
+                入库单号: rukuNo,
+                派送方式: document.getElementById('edit派送方式').value,
+                跟踪单号: document.getElementById('edit跟踪单号').value,
+                是否已提供POD: document.getElementById('edit是否已提供POD').value,
+                预计到仓时间: document.getElementById('edit预计到仓时间').value,
+                客服备注: document.getElementById('edit客服备注').value,
+                用户名: currentUser  // 添加当前登录用户名
+            };
+        }
+
+        // 发送更新请求
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'token': localStorage.getItem('hash') || ''
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.details || `更新失败: ${response.statusText}`);
+        }
+
+        // 更新成功，关闭模态框并重新加载数据
+        document.querySelector('.edit-modal').style.display = 'none';
+        loadRukuData();
+        
+        // 显示成功提示
+        alert('更新成功！');
+    } catch (error) {
+        console.error('[表单提交] 错误:', error);
+        alert(`更新失败：${error.message}`);
+    }
+});
+
+
+    // 导出Excel功能 - 修复跟踪单号导出问题
+    async function exportToExcel() {
+        document.getElementById('exportLoading').style.display = 'inline-block';
+        document.getElementById('exportExcel').disabled = true;
+        
+        try {
+            // 获取表格中所有数据行
+            const tableBody = document.getElementById('rukuTableBody');
+            const rows = tableBody.querySelectorAll('tr');
+            
+            if (rows.length === 0 || (rows.length === 1 && rows[0].querySelector('td[colspan="18"]'))) {
+                alert('没有符合条件的数据可导出');
+                return;
+            }
+            
+            // 从表格行提取数据（修复跟踪单号获取方式）
+            const formattedData = Array.from(rows).map(row => {
+                const cells = row.querySelectorAll('td');
+                // 处理跟踪单号：如果是链接则获取链接文本，否则直接获取单元格文本
+                let trackingNumber = '';
+                const trackingCell = cells[9];
+                const trackingLink = trackingCell.querySelector('a');
+                if (trackingLink) {
+                    trackingNumber = trackingLink.textContent.trim();
+                } else {
+                    trackingNumber = trackingCell.textContent.trim();
+                }
+                
+                return {
+                    '仓库': cells[0].textContent,
+                    '入库单号': cells[1].textContent,
+                    '客户': cells[2].textContent,
+                    '所属客服': cells[3].textContent,
+                    '预报箱数/托盘数': cells[4].textContent,
+                    '当前状态': cells[5].textContent,
+                    '创建日期': cells[6].textContent,
+                    '上架时间': cells[7].textContent,
+                    '派送方式': cells[8].textContent,
+                    '跟踪单号': trackingNumber,  // 使用修复后的跟踪单号
+                    '是否已提供POD': cells[10].textContent,
+                    '预计到仓时间': cells[11].textContent,
+                    '实际到仓时间': cells[12].textContent,
+                    '上架箱数': cells[13].textContent,
+                    '客服备注': cells[14].textContent,
+                    '后端备注': cells[15].textContent,
+                    '是否异常': cells[16].textContent
+                };
+            });
+            
+            // 创建Excel
+            const ws = XLSX.utils.json_to_sheet(formattedData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "入库单数据");
+            
+            // 设置列宽
+            const wscols = [
+                {wch: 12}, {wch: 18}, {wch: 15}, {wch: 15}, {wch: 15},
+                {wch: 12}, {wch: 20}, {wch: 20}, {wch: 12}, {wch: 18},
+                {wch: 15}, {wch: 20}, {wch: 20}, {wch: 12}, {wch: 30},
+                {wch: 30}, {wch: 10}
+            ];
+            ws['!cols'] = wscols;
+            
+            // 导出文件
+            XLSX.writeFile(wb, `入库单数据_${new Date().toISOString().slice(0,10)}.xlsx`);
+            alert('导出成功！');
+            
+        } catch (error) {
+            console.error('[exportToExcel] 错误:', error);
+            alert(`导出失败：${error.message}`);
+        } finally {
+            document.getElementById('exportLoading').style.display = 'none';
+            document.getElementById('exportExcel').disabled = false;
+        }
+    }
+
+
+    async function initPage() {
+    // 验证登录状态
+    const hash = localStorage.getItem('hash');
+    const username = localStorage.getItem('username');
+    
+    if (!hash || !username) {
+        alert('请先登录！');
+        window.location.href = '/index-login.html';
+        return;
+    }
+    
+    // 显示用户名
+    document.getElementById('usernameDisplay').textContent = username;
+    
+    // 初始化水印
+    initWatermark(username);
+    
+    // 绑定事件
+    document.getElementById('applyFilters').addEventListener('click', () => {
+        currentPage = 1; // 重置到第一页
+        loadRukuData();
+    });
+    
+    document.getElementById('resetFilters').addEventListener('click', resetFilters);
+    bindPaginationEvents();
+    
+    // 加载数据
+    await loadRukuData();
+    
+    // 点击空白处关闭模态框
+    window.addEventListener('click', (e) => {
+        const modal = document.querySelector('.edit-modal');
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+        
+        const logsModal = document.getElementById('logsModal');
+        if (e.target === logsModal) {
+            logsModal.style.display = 'none';
+        }
+    });
+    
+    // 退出登录功能
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+        if (confirm('确定要退出登录吗？')) {
+            localStorage.removeItem('hash');
+            localStorage.removeItem('username');
+            window.location.href = '/index-login.html';
+        }
+    });
+    
+    // 侧边栏切换（移动端）
+    document.getElementById('menuToggle').addEventListener('click', () => {
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.toggle('hidden');
+    });
+
+    // 用户下拉菜单切换
+    document.getElementById('userMenu').addEventListener('click', () => {
+        const dropdown = document.getElementById('userDropdown');
+        dropdown.classList.toggle('active');
+    });
+
+    // 点击其他区域关闭用户下拉菜单
+    document.addEventListener('click', (e) => {
+        const userContainer = document.getElementById('userContainer');
+        const dropdown = document.getElementById('userDropdown');
+        if (!userContainer.contains(e.target)) {
+            dropdown.classList.remove('active');
+        }
+    });
+
+    // 绑定导出按钮事件
+    document.getElementById('exportExcel').addEventListener('click', exportToExcel);
+}
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', initPage);
+  </script>
+</body>
+</html>

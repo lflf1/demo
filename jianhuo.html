@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>拣货时效管理 - 管理系统</title>
+  <!-- 引入外部资源 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.3.9/dist/index.css">
+  <script src="https://unpkg.com/element-plus@2.3.9/dist/index.full.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  <link rel="icon" href="/img/header.png" type="image/x-icon">
+  
+  <!-- 请求拦截器 -->
+  <script>
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = function(url, options = {}) {
+          if (typeof url === 'string' && (url.includes('wdbso.vip') || url.startsWith('/'))) {
+              if (!url.includes('wdbso.vip/a') && !url.includes('wdbso.vip/b')) {
+                  if (!options.headers) options.headers = {};
+                  const hash = localStorage.getItem('hash');
+                  if (hash) options.headers['token'] = hash;
+              }
+          }
+          return originalFetch(url, options);
+      };
+      
+      const originalXHROpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+          if (typeof url === 'string' && url.includes('wdbso.vip')) {
+              this._url = url;
+          }
+          return originalXHROpen.apply(this, arguments);
+      };
+      
+      const originalXHRSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function(body) {
+          if (this._url && this._url.includes('wdbso.vip')) {
+              if (!this._url.includes('wdbso.vip/a') && !this._url.includes('wdbso.vip/b')) {
+                  const hash = localStorage.getItem('hash');
+                  if (hash) this.setRequestHeader('token', hash);  
+              }
+          }
+          return originalXHRSend.call(this, body);
+      };
+    })();
+  </script>
+  
+  <!-- 配置Tailwind -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            success: '#00B42A',
+            warning: '#FF7D00',
+            danger: '#F53F3F',
+            'neutral-100': '#F2F3F5',
+            'neutral-200': '#E5E6EB',
+            'neutral-300': '#C9CDD4',
+            'neutral-400': '#86909C',
+            'neutral-500': '#4E5969',
+            'neutral-600': '#1D2129',
+          },
+          fontFamily: {
+            inter: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+  body {
+            cursor: url('/img/mouse.png'), auto;
+             position: relative;
+        }
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .card-shadow {
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      }
+      .hover-lift {
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      .hover-lift:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+      }
+      .text-ellipsis {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .data-table th, .data-table td {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid #e5e6eb;
+      }
+      .data-table th {
+        background-color: #f2f3f5;
+        font-weight: 500;
+        color: #4e5969;
+      }
+      .data-table tr:hover {
+        background-color: #f9f9f9;
+      }
+      .toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: #1d2129;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        z-index: 1000;
+      }
+      .toast.show {
+        opacity: 1;
+      }
+      .filter-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+      .filter-item label {
+        min-width: 80px;
+        margin-right: 0.5rem;
+        color: #4e5969;
+      }
+      .filter-item input, .filter-item select {
+        flex: 1;
+        padding: 0.5rem;
+        border: 1px solid #e5e6eb;
+        border-radius: 4px;
+        min-width: 150px;
+      }
+      .spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(64, 158, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #409eff;
+        animation: spin 1s ease-in-out infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      .stat-card {
+        border-radius: 8px;
+        padding: 1.25rem;
+        transition: all 0.3s ease;
+      }
+      .stat-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      }
+      .watermark-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 999;
+        overflow: hidden;
+        opacity: 0.04;
+        background-repeat: repeat;
+      }
+      .watermark-text {
+        position: absolute;
+        font-size: 28px;
+        font-weight: 600;
+        color: #000000;
+        transform: rotate(-45deg);
+        white-space: nowrap;
+        user-select: none;
+        display: block;
+      }
+      /* 用户下拉菜单样式 */
+      .user-dropdown {
+        display: none;
+      }
+      .user-container:hover .user-dropdown {
+        display: block;
+      }
+    }
+  </style>
+</head>
+
+<body class="font-inter bg-neutral-100 text-neutral-600 min-h-screen flex flex-col">
+  <div id="app" class="flex flex-col h-screen overflow-hidden">
+    <!-- 顶部导航栏 -->
+    <div class="watermark-container" id="watermarkContainer"></div>
+    <header class="bg-white border-b border-neutral-200 shadow-sm z-10">
+  <div class="w-full px-4">
+    <div class="flex items-center justify-between h-16 max-w-full">
+      <!-- 左侧Logo和标题 -->
+      <div class="flex items-center space-x-2">
+        <button id="menuToggle" class="md:hidden text-neutral-600 hover:text-primary mr-2">
+          <i class="fa fa-bars text-xl"></i>
+        </button>
+        <div class="text-primary text-2xl">
+          <i class="fa fa-truck"></i>
+        </div>
+        <h1 class="text-xl font-bold text-neutral-600 whitespace-nowrap">管理系统</h1>
+      </div>
+      
+      <!-- 右侧用户区域 -->
+      <div class="flex items-center space-x-6 ml-auto">
+        <!-- 通知图标 -->
+        <div class="relative cursor-pointer hover:text-primary transition-colors">
+          <i class="fa fa-bell-o text-lg"></i>
+          <span class="absolute -top-1 -right-1 bg-danger text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">3</span>
+        </div>
+        <!-- 用户信息及下拉菜单 -->
+        <div class="relative user-container" id="userContainer">
+          <div class="flex items-center space-x-3 cursor-pointer group" id="userMenu">
+            <img src="/img/1.png" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm">
+            <span class="font-medium hidden md:inline-block" id="usernameDisplay">加载中...</span>
+            <i class="fa fa-angle-down text-neutral-400 group-hover:text-primary transition-colors"></i>
+          </div>
+          
+          <!-- 用户下拉菜单 -->
+          <div class="user-dropdown absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 border border-neutral-200" id="userDropdown">
+            <div class="py-2">
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-user-o mr-2 text-neutral-400"></i>个人中心
+              </a>
+              <a href="kh/settings.html" class="block px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog mr-2 text-neutral-400"></i>系统设置
+              </a>
+              <div class="border-t border-neutral-100 my-1"></div>
+              <button id="logoutBtn" class="w-full text-left px-4 py-2 text-sm text-danger hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-out mr-2"></i>退出登录
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+    
+    <!-- 主内容区 -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- 侧边导航 -->
+      <aside class="w-64 bg-white border-r border-neutral-200 flex-shrink-0 hidden md:block transition-all duration-300" id="sidebar">
+        <nav class="py-4 h-full flex flex-col">
+          <div class="px-4 mb-4">
+            <div class="relative">
+              <input type="text" placeholder="搜索功能..." class="w-full py-2 px-3 pl-10 rounded-lg bg-neutral-100 border border-transparent focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm">
+              <i class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400"></i>
+            </div>
+          </div>
+          
+          <ul class="flex-1 overflow-y-auto py-2">
+            <li class="mb-1">
+              <a href="https://wdbso.vip/dashboard.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-dashboard w-5 text-center mr-3"></i>
+                <span>数据仪表盘</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khwuliu.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-history w-5 text-center mr-3"></i>
+                <span>客户物流详情</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khruku.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-sign-in w-5 text-center mr-3"></i>
+                <span>入库管理</span>
+              </a>
+            </li>  
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/errorOrders.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-exclamation-circle w-5 text-center mr-3"></i>
+                <span>异常订单管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khyue.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-money w-5 text-center mr-3"></i>
+                <span>客户余额</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/wuliu.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>物流查询</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/khsku.html" class="nnav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-bar-chart w-5 text-center mr-3"></i>
+                <span>SKU排行榜</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/everyday.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-calendar-check-o w-5 text-center mr-3"></i>
+                <span>每日看板</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="https://wdbso.vip/kh/jianhuo.html" class="nav-link flex items-center px-4 py-3 text-primary bg-primary/5 border-r-4 border-primary font-medium">
+                <i class="fa fa-clock-o w-5 text-center mr-3"></i>
+                <span>拣货时效管理</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="kh/settings.html" class="nav-link flex items-center px-4 py-3 text-neutral-500 hover:bg-neutral-100 transition-colors">
+                <i class="fa fa-cog w-5 text-center mr-3"></i>
+                <span>系统设置</span>
+              </a>
+            </li>
+          </ul>
+          
+          <div class="p-4 border-t border-neutral-200">
+            <div class="bg-primary/5 rounded-lg p-3">
+              <h4 class="font-medium text-primary text-sm mb-2">需要帮助？</h4>
+              <p class="text-neutral-500 text-xs mb-3">查看帮助文档或联系技术支持</p>
+              <a href="#" class="text-xs text-primary hover:underline">
+                <i class="fa fa-question-circle mr-1"></i> 帮助中心
+              </a>
+            </div>
+          </div>
+        </nav>
+      </aside>
+      
+      <!-- 拣货时效管理内容 -->
+      <main class="flex-1 overflow-y-auto p-4 md:p-6">
+        <section id="jianhuoDataSection">
+          <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-600 mb-3">拣货时效管理</h2>
+          
+          <!-- 筛选区域 -->
+          <div class="bg-white rounded-xl p-5 card-shadow mb-6">
+            <div class="flex flex-col md:flex-row md:items-center gap-4">
+              <div class="flex flex-wrap items-center gap-4">
+                <div class="flex items-center">
+                  <label for="outDateFilter" class="text-neutral-600 mr-2 text-sm">出库日期:</label>
+                  <input type="date" id="outDateFilter" class="py-2 px-3 rounded-lg border border-neutral-200 focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all text-sm w-full md:w-40">
+                </div>
+                <button onclick="fetchJianhuoData()" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg transition-colors text-sm">查询数据</button>
+                <button onclick="resetFilter()" class="px-4 py-2 border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 transition-colors text-sm">重置</button>
+              </div>
+              <div class="flex flex-wrap items-center gap-3">
+                <button onclick="refreshData()" class="px-4 py-2 border border-neutral-200 text-neutral-600 rounded-lg hover:bg-neutral-50 transition-colors text-sm flex items-center">
+                  <i class="fa fa-refresh mr-1.5"></i> 刷新数据
+                </button>
+                <button onclick="exportData()" class="bg-success hover:bg-success/90 text-white px-4 py-2 rounded-lg transition-colors text-sm flex items-center">
+                  <i class="fa fa-download mr-1.5"></i> 导出数据
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 统计卡片区域 -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="stat-card bg-white border border-neutral-200">
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-neutral-500 text-sm mb-1">当日应出库单量</p>
+                  <h3 class="text-2xl font-bold text-neutral-600" id="totalOrders">0</h3>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                  <i class="fa fa-list-alt"></i>
+                </div>
+              </div>
+              <div class="mt-2 text-xs text-neutral-500">
+                <span>总目标单量</span>
+              </div>
+            </div>
+            
+            <div class="stat-card bg-white border border-neutral-200">
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-neutral-500 text-sm mb-1">已完成拣货单量</p>
+                  <h3 class="text-2xl font-bold text-success" id="completedOrders">0</h3>
+                </div>
+                <div class="w-10 h-10 rounded-full-full bg-success/10 flex items-center justify-center text-success">
+                  <i class="fa fa-check-circle"></i>
+                </div>
+              </div>
+              <div class="mt-2 text-xs text-neutral-500">
+                <span>完成率: <span id="completionRate">0%</span></span>
+              </div>
+            </div>
+            
+            <div class="stat-card bg-white border border border-neutral-200">
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-neutral-500 text-sm mb-1">平均每小时时效</p>
+                  <h3 class="text-2xl font-bold text-warning" id="avgHourlyRate">0</h3>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center text-warning">
+                  <i class="fa fa-tachometer"></i>
+                </div>
+              </div>
+              <div class="mt-2 text-xs text-neutral-500">
+                <span>单/小时</span>
+              </div>
+            </div>
+            
+            <div class="stat-card bg-white border border-neutral-200">
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-neutral-500 text-sm mb-1">拣货总时长</p>
+                  <h3 class="text-2xl font-bold text-primary" id="totalWorkHours">0</h3>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                  <i class="fa fa-clock-o"></i>
+                </div>
+              </div>
+              <div class="mt-2 text-xs text-neutral-500">
+                <span>小时</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 图表区域 -->
+          <div class="bg-white rounded-xl card-shadow mb-6 overflow-hidden">
+            <div class="p-5 border-b border-neutral-200">
+              <h3 class="font-semibold text-neutral-600">每小时拣货时效趋势</h3>
+            </div>
+            <div class="p-5">
+              <canvas id="hourlyRateChart" height="300"></canvas>
+            </div>
+          </div>
+          
+          <!-- 数据表格区域 -->
+          <div class="bg-white rounded-xl card-shadow mb-6 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[900px] data-table" id="jianhuo-table">
+                <thead>
+                  <tr>
+                    <th>出库日期</th>
+                    <th>拣货小时</th>
+                    <th>累计拣货单量</th>
+                    <th>实际拣货单量</th>
+                    <th>当日应出库单量</th>
+                    <th>每小时理论时效</th>
+                    <th>时效达成率</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="8" class="text-center py-10 text-neutral-500">
+                      <i class="fa fa-info-circle mr-2"></i> 请选择日期并点击"查询数据"
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div class="flex items-center justify-between py-3 px-4 border-t border-neutral-200">
+              <p class="text-sm text-neutral-400" id="jianhuoDataCount">共 0 条数据</p>
+              <el-pagination
+                v-model:current-page="currentPage"
+                :page-size="10"
+                :total="totalCount"
+                layout="prev, pager, next"
+                @current-change="handlePageChange"
+              ></el-pagination>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">
+    <i class="fa fa-check-circle mr-2"></i>
+    <span>操作成功</span>
+  </div>
+
+  <script>
+    // 全局变量定义，确保所有函数都能访问
+    let jianhuoApp;
+    let hourlyRateChart = null;
+    let jianhuoData = [];
+    
+    // 在页面加载时创建Vue实例
+    document.addEventListener('DOMContentLoaded', () => {
+      // 创建Vue实例并挂载到全局变量
+      jianhuoApp = Vue.createApp({
+        setup() {
+          // 定义响应式变量
+          const currentPage = Vue.ref(1);
+          const totalCount = Vue.ref(0);
+          
+          Vue.onMounted(() => {
+            // 设置默认日期为明天
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate());
+            const defaultDate = tomorrow.toISOString().split('T')[0];
+            document.getElementById('outDateFilter').value = defaultDate;
+            
+            initJianhuoModule();
+            
+            const menuToggle = document.getElementById('menuToggle');
+            if (menuToggle) {
+              menuToggle.addEventListener('click', () => {
+                const sidebar = document.getElementById('sidebar');
+                if (sidebar) sidebar.classList.toggle('hidden');
+              });
+            }
+            
+            // 初始化图表
+            initChart();
+            initPage();
+          });
+          
+          function initJianhuoModule() {
+            // 初始化表格交互
+          }
+          
+          function handlePageChange(page) {
+            currentPage.value = page;
+            renderTableData();
+          }
+          
+          // 暴露变量和方法供全局访问
+          return { 
+            currentPage, 
+            totalCount, 
+            handlePageChange,
+            // 提供获取和设置totalCount的方法
+            setTotalCount: (value) => { totalCount.value = value; },
+            getTotalCount: () => totalCount.value,
+            setCurrentPage: (value) => { currentPage.value = value; },
+            getCurrentPage: () => currentPage.value
+          };
+        }
+      }).use(ElementPlus).mount('#app');
+    });
+    
+    function initWatermark(username) {
+      const container = document.getElementById('watermarkContainer');
+      if (!container || !username) return;
+      
+      container.innerHTML = '';
+      
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const step = 200;
+      const horizontalCount = Math.ceil(windowWidth / step) + 1;
+      const verticalCount = Math.ceil(windowHeight / step) + 1;
+      
+      for (let i = 0; i < verticalCount; i++) {
+        for (let j = 0; j < horizontalCount; j++) {
+          const watermark = document.createElement('div');
+          watermark.className = 'watermark-text';
+          watermark.textContent = username;
+          
+          const left = j * step - step/2;
+          const top = i * step - step/2;
+          
+          watermark.style.left = `${left}px`;
+          watermark.style.top = `${top}px`;
+          
+          container.appendChild(watermark);
+        }
+      }
+    }
+    
+    // 初始化页面
+    async function initPage() {
+        const username = localStorage.getItem('username');
+        if (!username) {
+            window.location.href = 'https://wdbso.vip/index-login.html';
+            return;
+        }
+        
+        document.getElementById('usernameDisplay').textContent = username;
+        initWatermark(username);
+        
+        window.addEventListener('resize', () => {
+          initWatermark(username);
+          if (hourlyRateChart) {
+            hourlyRateChart.resize();
+          }
+        });
+        
+        // 退出登录
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+          localStorage.removeItem('hash');
+          localStorage.removeItem('username');
+          localStorage.removeItem('token');
+          checkHash();
+        });
+    }
+    
+    // 检查登录状态
+    function checkHash() {
+      const hash = localStorage.getItem('hash');
+      if (!hash) {
+        redirectToLogin();
+      }
+    }
+    
+    function redirectToLogin() {
+      alert('会话已过期，请重新登录');
+      window.location.href = 'http://wdbso.vip/index-login.html';
+    }
+    
+    // 初始化图表
+    function initChart() {
+      const ctx = document.getElementById('hourlyRateChart').getContext('2d');
+      hourlyRateChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: '实际拣货单量',
+              data: [],
+              backgroundColor: 'rgba(22, 93, 255, 0.7)',
+              borderColor: 'rgba(22, 93, 255, 1)',
+              borderWidth: 1
+            },
+            {
+              label: '理论拣货单量',
+              data: [],
+              backgroundColor: 'rgba(255, 125, 0, 0.5)',
+              borderColor: 'rgba(255, 125, 0, 1)',
+              borderWidth: 1,
+              type: 'line',
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: '单量'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: '拣货小时'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false
+            }
+          }
+        }
+      });
+    }
+    
+    // 对拣货小时进行特殊排序（23→0→1→...→6）
+    function sortByPickHour(data) {
+      // 定义排序规则：23排在最前面，然后是0-6
+      const hourOrder = [23, 0, 1, 2, 3, 4, 5, 6];
+      return [...data].sort((a, b) => {
+        return hourOrder.indexOf(a['拣货小时']) - hourOrder.indexOf(b['拣货小时']);
+      });
+    }
+    
+    // 计算实际单量（处理累计值）
+    function calculateActualQuantities(accumulatedData) {
+      if (accumulatedData.length === 0) return [];
+      
+      // 复制原数据，避免修改源数据
+      const processedData = [...accumulatedData];
+      
+      // 第一个小时（23点）的实际单量 = 自身累计值（无前置小时）
+      processedData[0].actualQuantity = processedData[0]['拣货单量'] || 0;
+      
+      // 从第二个小时开始，实际单量 = 当前累计 - 上一小时累计
+      for (let i = 1; i < processedData.length; i++) {
+        const currentAccumulated = processedData[i]['拣货单量'] || 0;
+        const prevAccumulated = processedData[i - 1]['拣货单量'] || 0;
+        // 防止数据异常（如累计值小于上一小时，取0兜底）
+        processedData[i].actualQuantity = Math.max(0, currentAccumulated - prevAccumulated);
+      }
+      
+      return processedData;
+    }
+    
+    // 获取拣货数据 - 从真实接口获取
+    async function fetchJianhuoData() {
+      try {
+        const outDate = document.getElementById('outDateFilter').value;
+        if (!outDate) {
+          showToast('请选择出库日期');
+          return;
+        }
+        
+        const tableBody = document.querySelector('#jianhuo-table tbody');
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-10">
+              <div class="spinner"></div>
+              <p>正在加载数据...</p>
+            </td>
+          </tr>
+        `;
+        
+        // 从真实接口获取数据
+        const response = await fetch(`/jianhuo_datac?outDate=${outDate}`);
+        
+        // 检查HTTP响应状态
+        if (!response.ok) {
+          throw new Error(`HTTP错误，状态码: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        // 处理接口返回的错误信息
+        if (!result.success) {
+          throw new Error(result.message || result.error || '获取数据失败');
+        }
+        
+        // 对数据按拣货小时进行特殊排序
+        let sortedData = sortByPickHour(result.data || []);
+        
+        // 计算实际单量（处理累计值）
+        jianhuoData = calculateActualQuantities(sortedData);
+        
+        // 通过全局Vue实例访问和更新响应式变量
+        jianhuoApp.setTotalCount(jianhuoData.length);
+        jianhuoApp.setCurrentPage(1);
+        
+        // 更新统计数据
+        updateStatistics();
+        
+        // 渲染表格
+        renderTableData();
+        
+        // 更新图表
+        updateChart();
+        
+        // 更新数据计数
+        document.getElementById('jianhuoDataCount').textContent = `共 ${jianhuoData.length} 条数据`;
+        
+        // 显示成功提示
+        showToast(result.message || `成功加载 ${jianhuoData.length} 条数据`);
+        
+      } catch (error) {
+        console.error('获取拣货数据失败:', error);
+        document.querySelector('#jianhuo-table tbody').innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-10 text-danger">
+              <i class="fa fa-exclamation-circle mr-2"></i>
+              <span>数据加载失败: ${error.message}</span>
+              <div class="mt-3">
+                <button onclick="fetchJianhuoData()" class="px-3 py-1 bg-primary text-white rounded text-sm">重试</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+    }
+    
+    // 更新统计数据
+    function updateStatistics() {
+      if (jianhuoData.length === 0) {
+        document.getElementById('totalOrders').textContent = '0';
+        document.getElementById('completedOrders').textContent = '0';
+        document.getElementById('completionRate').textContent = '0%';
+        document.getElementById('avgHourlyRate').textContent = '0';
+        document.getElementById('totalWorkHours').textContent = '0';
+        return;
+      }
+      
+      // 当日应出库单量（取第一条数据）
+      const totalOrders = jianhuoData[0]['当日应出库单量'] || 0;
+      document.getElementById('totalOrders').textContent = totalOrders;
+      
+      // 已完成拣货单量（使用计算出的实际单量）
+      const completedOrders = jianhuoData.reduce((sum, item) => sum + (item.actualQuantity || 0), 0);
+      document.getElementById('completedOrders').textContent = completedOrders;
+      
+      // 完成率
+      const completionRate = totalOrders > 0 ? Math.round((completedOrders / totalOrders) * 100) : 0;
+      document.getElementById('completionRate').textContent = `${completionRate}%`;
+      
+      // 平均每小时时效（基于实际单量）
+      const avgHourlyRate = jianhuoData.length > 0 ? Math.round(completedOrders / jianhuoData.length) : 0;
+      document.getElementById('avgHourlyRate').textContent = avgHourlyRate;
+      
+      // 拣货总时长
+      document.getElementById('totalWorkHours').textContent = jianhuoData.length;
+    }
+    
+    // 渲染表格数据
+    function renderTableData() {
+      const tableBody = document.querySelector('#jianhuo-table tbody');
+      if (jianhuoData.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-10 text-neutral-500">
+              <i class="fa fa-search mr-2"></i>
+              <span>没有找到匹配的拣货数据</span>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+      
+      // 通过全局Vue实例获取当前页码
+      const currentPage = jianhuoApp.getCurrentPage();
+      // 分页处理
+      const pageSize = 10;
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = Math.min(startIndex + pageSize, jianhuoData.length);
+      const pageData = jianhuoData.slice(startIndex, endIndex);
+      
+      // 计算理论时效和达成率
+      const totalOrders = jianhuoData[0]['当日应出库单量'] || 0;
+      const workHours = jianhuoData.length;
+      const hourlyTarget = workHours > 0 ? totalOrders / workHours : 0;
+      
+      tableBody.innerHTML = pageData.map(item => {
+        const actual = item.actualQuantity || 0;
+        const rate = hourlyTarget > 0 ? Math.round((actual / hourlyTarget) * 100) : 0;
+        let rateClass = 'text-neutral-500';
+        
+        if (rate >= 100) rateClass = 'text-success';
+        else if (rate < 80) rateClass = 'text-danger';
+        else rateClass = 'text-warning';
+        
+        return `
+          <tr>
+            <td>${item['出库日期'] || '-'}</td>
+            <td>${item['拣货小时']}点</td>
+            <td>${item['拣货单量'] || 0}</td>
+            <td>${actual}</td>
+            <td>${item['当日应出库单量'] || 0}</td>
+            <td>${hourlyTarget.toFixed(1)}</td>
+            <td class="${rateClass}">${rate}%</td>
+            <td>
+              <button onclick="copyText('${item['出库日期'] || ''} ${item['拣货小时']}点: 实际${actual}单，累计${item['拣货单量'] || 0}单')" 
+                class="text-primary text-xs hover:underline">复制</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    // 更新图表数据
+    function updateChart() {
+      if (!hourlyRateChart) return;
+      
+      if (jianhuoData.length === 0) {
+        hourlyRateChart.data.labels = [];
+        hourlyRateChart.data.datasets[0].data = [];
+        hourlyRateChart.data.datasets[1].data = [];
+        hourlyRateChart.update();
+        return;
+      }
+      
+      // 准备图表数据（已按23→0→1...排序）
+      const labels = jianhuoData.map(item => `${item['拣货小时']}点`);
+      const actualData = jianhuoData.map(item => item.actualQuantity || 0);
+      
+      // 计算理论数据
+      const totalOrders = jianhuoData[0]['当日应出库单量'] || 0;
+      const workHours = jianhuoData.length;
+      const hourlyTarget = workHours > 0 ? totalOrders / workHours : 0;
+      const targetData = jianhuoData.map(() => hourlyTarget);
+      
+      // 更新图表
+      hourlyRateChart.data.labels = labels;
+      hourlyRateChart.data.datasets[0].data = actualData;
+      hourlyRateChart.data.datasets[1].data = targetData;
+      hourlyRateChart.update();
+    }
+    
+    // 刷新数据
+    function refreshData() {
+      fetchJianhuoData();
+      showToast('数据已刷新');
+    }
+    
+    // 重置筛选条件
+    function resetFilter() {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const defaultDate = tomorrow.toISOString().split('T')[0];
+      document.getElementById('outDateFilter').value = defaultDate;
+    }
+    
+    // 导出数据
+    function exportData() {
+      if (jianhuoData.length === 0) {
+        showToast('没有可导出的数据');
+        return;
+      }
+      
+      // 构建CSV内容
+      let csvContent = "出库日期,拣货小时,累计拣货单量,实际拣货单量,当日应出库单量,每小时理论时效,时效达成率\n";
+      
+      const totalOrders = jianhuoData[0]['当日应出库单量'] || 0;
+      const workHours = jianhuoData.length;
+      const hourlyTarget = workHours > 0 ? totalOrders / workHours : 0;
+      
+      jianhuoData.forEach(item => {
+        const actual = item.actualQuantity || 0;
+        const rate = hourlyTarget > 0 ? Math.round((actual / hourlyTarget) * 100) : 0;
+        
+        csvContent += `${item['出库日期'] || ''},`;
+        csvContent += `${item['拣货小时']},`;
+        csvContent += `${item['拣货单量'] || 0},`;
+        csvContent += `${actual},`;
+        csvContent += `${item['当日应出库单量'] || 0},`;
+        csvContent += `${hourlyTarget.toFixed(1)},`;
+        csvContent += `${rate}%\n`;
+      });
+      
+      // 创建下载链接
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', `拣货时效数据_${jianhuoData[0]['出库日期'] || ''}.csv`);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      showToast('数据导出成功');
+    }
+    
+    // 复制文本
+    function copyText(text) {
+      if (!text) return;
+      
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('已复制到剪贴板');
+      }).catch(err => {
+        console.error('复制失败:', err);
+      });
+    }
+    
+    // 显示提示信息
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.innerHTML = `<i class="fa fa-check-circle mr-2"></i><span>${message}</span>`;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+  </script>
+</body>
+</html>
